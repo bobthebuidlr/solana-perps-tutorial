@@ -1,0 +1,274 @@
+use anchor_lang::prelude::*;
+
+use crate::{constants::*, error::ErrorCode, PerpsMarket, Position, PositionDirection};
+
+/// Calculate mark price from spot price and open interest
+/// Formula: Mark = Spot × (1 + (LongOI - ShortOI) / TotalOI × adjustment_factor)
+pub fn calculate_mark_price(
+    spot_price: u64,
+    total_long_oi: u64,
+    total_short_oi: u64,
+    mark_adjustment_factor: u64,
+) -> Result<u64> {
+    let total_oi = total_long_oi
+        .checked_add(total_short_oi)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+    // If no open interest, mark = spot
+    if total_oi == 0 {
+        return Ok(spot_price);
+    }
+
+    // Calculate OI imbalance: (long - short)
+    let oi_imbalance = (total_long_oi as i128)
+        .checked_sub(total_short_oi as i128)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+    // Calculate adjustment: (imbalance / total_oi) * adjustment_factor
+    // adjustment_factor is scaled by 1_000_000, so result is in basis points
+    let adjustment = oi_imbalance
+        .checked_mul(mark_adjustment_factor as i128)
+        .ok_or(ErrorCode::ArithmeticOverflow)?
+        .checked_div(total_oi as i128)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+    // Apply adjustment to spot price
+    // mark = spot + (spot * adjustment / 1_000_000)
+    let spot_adjustment = (spot_price as i128)
+        .checked_mul(adjustment)
+        .ok_or(ErrorCode::ArithmeticOverflow)?
+        .checked_div(1_000_000 as i128)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+    let mark_price = (spot_price as i128)
+        .checked_add(spot_adjustment)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+    require!(mark_price > 0, ErrorCode::OraclePriceMismatch);
+
+    Ok(mark_price as u64)
+}
+
+pub fn calculate_pnl(position: &Position, current_price: u64) -> Result<i64> {
+    let value_before: i64 = position
+        .position_size
+        .checked_mul(position.entry_price)
+        .ok_or(ErrorCode::ArithmeticOverflow)? as i64;
+    let value_after: i64 = position
+        .position_size
+        .checked_mul(current_price)
+        .ok_or(ErrorCode::ArithmeticOverflow)? as i64;
+
+    return match position.direction {
+        PositionDirection::Long => {
+            let pnl: i64 = value_after
+                .checked_sub(value_before)
+                .ok_or(ErrorCode::ArithmeticOverflow)? as i64;
+            Ok(pnl)
+        }
+        PositionDirection::Short => {
+            let pnl: i64 = value_before
+                .checked_sub(value_after)
+                .ok_or(ErrorCode::ArithmeticOverflow)? as i64;
+            Ok(pnl)
+        }
+    };
+}
+
+/// Calculate the current funding rate based on OI imbalance
+/// Returns funding rate scaled by FUNDING_RATE_BASE (1_000_000 = 100%)
+/// Positive rate = longs pay shorts, Negative rate = shorts pay longs
+pub fn calculate_funding_rate(total_long_oi: u64, total_short_oi: u64) -> Result<i64> {
+    let total_oi = total_long_oi
+        .checked_add(total_short_oi)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+    // If no open interest, funding rate is 0
+    if total_oi == 0 {
+        return Ok(0);
+    }
+
+    // Calculate OI imbalance ratio: (long - short) / total
+    let oi_imbalance = (total_long_oi as i128)
+        .checked_sub(total_short_oi as i128)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+    // Funding rate = (imbalance / total) * MAX_FUNDING_RATE
+    // If 100% imbalance (all longs or all shorts), funding rate = MAX_FUNDING_RATE
+    let funding_rate = oi_imbalance
+        .checked_mul(MAX_FUNDING_RATE as i128)
+        .ok_or(ErrorCode::ArithmeticOverflow)?
+        .checked_div(total_oi as i128)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+    Ok(funding_rate as i64)
+}
+
+/// Updates cumulative funding indices for both long and short positions
+/// Must be called BEFORE any OI change to ensure accurate funding accumulation
+pub fn update_funding_indices(
+    perps_markets: &mut Vec<PerpsMarket>,
+    current_timestamp: i64,
+) -> Result<()> {
+    for perps_market in perps_markets {
+        // Calculate time elapsed
+        let time_elapsed = current_timestamp
+            .checked_sub(perps_market.last_funding_update)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+        // If no time passed or timestamp went backwards, no update needed
+        if time_elapsed <= 0 {
+            return Ok(());
+        }
+
+        // Calculate number of intervals (5-minute periods)
+        let intervals = time_elapsed
+            .checked_div(FUNDING_INTERVAL)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+        // If less than one interval passed, no update needed
+        if intervals == 0 {
+            return Ok(());
+        }
+
+        // Calculate current funding rate based on OI imbalance
+        let funding_rate =
+            calculate_funding_rate(perps_market.total_long_oi, perps_market.total_short_oi)?;
+
+        // Calculate funding delta for this period
+        let funding_delta = (funding_rate as i128)
+            .checked_mul(intervals as i128)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+        // Update cumulative indices
+        perps_market.cumulative_funding_long = perps_market
+            .cumulative_funding_long
+            .checked_add(funding_delta)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+        perps_market.cumulative_funding_short = perps_market
+            .cumulative_funding_short
+            .checked_sub(funding_delta)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+        // Update timestamp
+        perps_market.last_funding_update = current_timestamp;
+
+        msg!(
+            "Funding indices updated: long={}, short={}",
+            perps_market.cumulative_funding_long,
+            perps_market.cumulative_funding_short
+        );
+    }
+
+    Ok(())
+}
+
+/// Calculate what the current funding indices would be without mutating the market
+/// Returns (current_long_index, current_short_index)
+pub fn calculate_current_funding_indices(
+    perps_market: &PerpsMarket,
+    current_timestamp: i64,
+) -> Result<(i128, i128)> {
+    // Calculate time elapsed
+    let time_elapsed = current_timestamp
+        .checked_sub(perps_market.last_funding_update)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+    // If no time passed or timestamp went backwards, return current indices
+    if time_elapsed <= 0 {
+        return Ok((
+            perps_market.cumulative_funding_long,
+            perps_market.cumulative_funding_short,
+        ));
+    }
+
+    // Calculate number of intervals (5-minute periods)
+    let intervals = time_elapsed
+        .checked_div(FUNDING_INTERVAL)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+    // If less than one interval passed, return current indices
+    if intervals == 0 {
+        return Ok((
+            perps_market.cumulative_funding_long,
+            perps_market.cumulative_funding_short,
+        ));
+    }
+
+    // Calculate current funding rate based on OI imbalance
+    let funding_rate =
+        calculate_funding_rate(perps_market.total_long_oi, perps_market.total_short_oi)?;
+
+    // Calculate funding delta for this period
+    let funding_delta = (funding_rate as i128)
+        .checked_mul(intervals as i128)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+    // Calculate what the new indices would be
+    let new_long_index = perps_market
+        .cumulative_funding_long
+        .checked_add(funding_delta)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+    let new_short_index = perps_market
+        .cumulative_funding_short
+        .checked_sub(funding_delta)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+    Ok((new_long_index, new_short_index))
+}
+
+/// Calculate funding PnL for a position using cumulative index approach
+/// Returns funding payment (positive = received, negative = paid)
+/// Can optionally provide pre-calculated current indices, otherwise uses market's stored indices
+pub fn calculate_funding_pnl(
+    position: &Position,
+    perps_market: &PerpsMarket,
+    current_timestamp: Option<i64>,
+) -> Result<i64> {
+    // Get current cumulative index based on position direction
+    let current_index = if let Some(timestamp) = current_timestamp {
+        // Calculate what the current index would be
+        let (long_index, short_index) = calculate_current_funding_indices(perps_market, timestamp)?;
+        match position.direction {
+            PositionDirection::Long => long_index,
+            PositionDirection::Short => short_index,
+        }
+    } else {
+        // Use the stored index from perps_market
+        match position.direction {
+            PositionDirection::Long => perps_market.cumulative_funding_long,
+            PositionDirection::Short => perps_market.cumulative_funding_short,
+        }
+    };
+
+    // Calculate index difference since position entry
+    let index_diff = current_index
+        .checked_sub(position.entry_funding_index)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+    // Calculate funding PnL
+    let funding_pnl = match position.direction {
+        PositionDirection::Long => {
+            // Longs pay when index increases (negative PnL)
+            let payment = index_diff
+                .checked_mul(position.position_size as i128)
+                .ok_or(ErrorCode::ArithmeticOverflow)?
+                .checked_div(FUNDING_RATE_BASE as i128)
+                .ok_or(ErrorCode::ArithmeticOverflow)?;
+            -(payment as i64)
+        }
+        PositionDirection::Short => {
+            // Shorts receive when longs pay (positive PnL when index decreases)
+            let payment = index_diff
+                .checked_mul(position.position_size as i128)
+                .ok_or(ErrorCode::ArithmeticOverflow)?
+                .checked_div(FUNDING_RATE_BASE as i128)
+                .ok_or(ErrorCode::ArithmeticOverflow)?;
+            payment as i64
+        }
+    };
+
+    Ok(funding_pnl)
+}
