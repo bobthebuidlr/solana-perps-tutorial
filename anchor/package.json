@@ -2,12 +2,14 @@
   "license": "ISC",
   "scripts": {
     "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w",
-    "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check"
+    "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check",
+    "setup-usdc": "tsx scripts/setup-user-usdc.ts"
   },
   "dependencies": {
     "@anchor-lang/core": "^1.0.0-rc.2",
     "@solana/spl-token": "^0.4.14",
-    "@solana/web3.js": "^1.98.4"
+    "@solana/web3.js": "^1.98.4",
+    "tsx": "^4.21.0"
   },
   "devDependencies": {
     "@types/bn.js": "^5.1.0",

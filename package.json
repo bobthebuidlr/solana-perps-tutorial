@@ -2,16 +2,20 @@
   "name": "perps-dex",
   "scripts": {
     "anchor-build": "cd anchor && anchor build",
-    "anchor-test": "cd anchor && anchor test --skip-deploy",
+    "anchor-test": "cd anchor && anchor test",
+    "anchor-deploy": "cd anchor && anchor deploy",
     "build": "next build",
     "ci": "npm run build && npm run lint && npm run format:check",
     "codama:js": "codama run js",
+    "create-markets": "tsx anchor/scripts/create-markets.ts",
     "dev": "next dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "init-program": "tsx anchor/scripts/initialize.ts",
     "lint": "eslint",
     "setup": "npm run anchor-build && npm run codama:js",
-    "start": "next start"
+    "start": "next start",
+    "workflow": "npm run anchor-build && npm run anchor-deploy && npm run init-program && npm run create-markets"
   },
   "description": "Next.js, Tailwind, @solana/react-hooks, Anchor vault program",
   "keywords": [
@@ -46,6 +50,7 @@
     "eslint-config-next": "16.0.10",
     "prettier": "^3.6.2",
     "tailwindcss": "^4",
+    "tsx": "^4.19.2",
     "typescript": "^5"
   }
 }

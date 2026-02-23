@@ -1,15 +1,9 @@
 import * as anchor from "@anchor-lang/core";
 import { BN, Program } from "@anchor-lang/core";
-import { PublicKey, SystemProgram } from "@solana/web3.js";
-import {
-  TOKEN_PROGRAM_ID,
-  getAssociatedTokenAddressSync,
-  createMint,
-  createAccount,
-  mintTo,
-} from "@solana/spl-token";
-import { Perps } from "../target/types/perps";
+import { createAccount, createMint, mintTo } from "@solana/spl-token";
+import { PublicKey } from "@solana/web3.js";
 import { assert } from "chai";
+import { Perps } from "../target/types/perps";
 
 /**
  * Full flow test for the Perps program
@@ -28,9 +22,7 @@ describe("Full Flow Test", () => {
   const program = anchor.workspace.Perps as Program<Perps>;
 
   // Test constants
-  const SOL_MINT = new PublicKey(
-    "So11111111111111111111111111111111111111112"
-  );
+  const SOL_MINT = new PublicKey("So11111111111111111111111111111111111111112");
   const MARKET_NAME = "SOL-PERP";
   const INITIAL_PRICE = new BN(100_000_000); // $100 per SOL
   const DEPOSIT_AMOUNT = new BN(1000_000_000); // 1000 USDC
@@ -149,12 +141,12 @@ describe("Full Flow Test", () => {
           .initialize()
           .accounts({
             authority: wallet.publicKey,
-            markets: marketsPda,
-            oracle: oraclePda,
-            vault: vaultPda,
+            // markets: marketsPda,
+            // oracle: oraclePda,
+            // vault: vaultPda,
             usdcMint: usdcMint,
-            tokenProgram: TOKEN_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
+            // tokenProgram: TOKEN_PROGRAM_ID,
+            // systemProgram: SystemProgram.programId,
           })
           .rpc();
 
@@ -296,11 +288,8 @@ describe("Full Flow Test", () => {
         .depositCollateral(DEPOSIT_AMOUNT)
         .accounts({
           user: wallet.publicKey,
-          userAccount: userAccountPda,
           userTokenAccount: userTokenAccount,
           vault: vaultPda,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
         })
         .rpc();
 
@@ -367,11 +356,11 @@ describe("Full Flow Test", () => {
           .openPosition(SOL_MINT, direction, POSITION_SIZE)
           .accounts({
             user: wallet.publicKey,
-            userAccount: userAccountPda,
-            position: positionPda,
+            // userAccount: userAccountPd a,
+            // position: positionPda,
             markets: marketsPda,
             oracle: oraclePda,
-            systemProgram: SystemProgram.programId,
+            // systemProgram: SystemProgram.programId,
           })
           .rpc();
 

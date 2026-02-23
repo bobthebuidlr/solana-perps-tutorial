@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Inter } from "next/font/google";
-import "./globals.css";
+import { Markets } from "./components/markets";
+import { PositionsTable } from "./components/positions-table";
 import { Providers } from "./components/providers";
+import { WalletConnectButton } from "./components/wallet-connect-button";
+import "./globals.css";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -32,11 +35,18 @@ export default function RootLayout({
   return (
     <html lang="en">
       <Providers>
+        <nav className="flex justify-between items-center py-2 px-10 border-b">
+          <h1 className="text-2xl font-bold">Perps Dex</h1>
+          <WalletConnectButton />
+        </nav>
         <body
           suppressHydrationWarning
           className={`${inter.variable} ${geistMono.variable} antialiased`}
         >
-          {children}
+          <div className="flex flex-col gap-4">
+            <Markets />
+            <PositionsTable />
+          </div>
         </body>
       </Providers>
     </html>
