@@ -2,53 +2,6 @@ use anchor_lang::prelude::*;
 
 use crate::{constants::*, error::ErrorCode, PerpsMarket, Position, PositionDirection};
 
-/// Calculate mark price from spot price and open interest
-/// Formula: Mark = Spot × (1 + (LongOI - ShortOI) / TotalOI × adjustment_factor)
-pub fn calculate_mark_price(
-    spot_price: u64,
-    total_long_oi: u64,
-    total_short_oi: u64,
-    mark_adjustment_factor: u64,
-) -> Result<u64> {
-    let total_oi = total_long_oi
-        .checked_add(total_short_oi)
-        .ok_or(ErrorCode::ArithmeticOverflow)?;
-
-    // If no open interest, mark = spot
-    if total_oi == 0 {
-        return Ok(spot_price);
-    }
-
-    // Calculate OI imbalance: (long - short)
-    let oi_imbalance = (total_long_oi as i128)
-        .checked_sub(total_short_oi as i128)
-        .ok_or(ErrorCode::ArithmeticOverflow)?;
-
-    // Calculate adjustment: (imbalance / total_oi) * adjustment_factor
-    // adjustment_factor is scaled by 1_000_000, so result is in basis points
-    let adjustment = oi_imbalance
-        .checked_mul(mark_adjustment_factor as i128)
-        .ok_or(ErrorCode::ArithmeticOverflow)?
-        .checked_div(total_oi as i128)
-        .ok_or(ErrorCode::ArithmeticOverflow)?;
-
-    // Apply adjustment to spot price
-    // mark = spot + (spot * adjustment / 1_000_000)
-    let spot_adjustment = (spot_price as i128)
-        .checked_mul(adjustment)
-        .ok_or(ErrorCode::ArithmeticOverflow)?
-        .checked_div(1_000_000 as i128)
-        .ok_or(ErrorCode::ArithmeticOverflow)?;
-
-    let mark_price = (spot_price as i128)
-        .checked_add(spot_adjustment)
-        .ok_or(ErrorCode::ArithmeticOverflow)?;
-
-    require!(mark_price > 0, ErrorCode::OraclePriceMismatch);
-
-    Ok(mark_price as u64)
-}
-
 /// Calculate price-based PnL for a position.
 /// position_size is token quantity (6-decimal), prices are 6-decimal fixed point.
 /// Returns PnL in USDC base units (6-decimal).

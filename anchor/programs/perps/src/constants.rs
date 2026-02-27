@@ -20,9 +20,6 @@ pub const POSITION_SEED: &[u8] = b"position";
 
 pub const ANCHOR_DISCRIMINATOR: usize = 8;
 
-// Default market parameters
-pub const DEFAULT_MARK_ADJUSTMENT_FACTOR: u64 = 1_000; // 0.1% per 100% OI imbalance
-
 pub const MAX_POSITIONS: usize = 2;
 
 pub const MAX_MARKETS: usize = 10;

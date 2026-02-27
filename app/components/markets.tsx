@@ -431,7 +431,7 @@ function OrderForm({ market }: { market: PerpsMarket | null }) {
         {/* Oracle price display */}
         {market && (
           <div className="rounded-lg bg-cream/30 px-3 py-2 text-xs text-muted">
-            <span>Mark price: </span>
+            <span>Oracle price: </span>
             <span className="font-mono font-semibold text-foreground">
               {oraclePrice !== null
                 ? `$${(Number(oraclePrice) / 10 ** USDC_DECIMALS).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`

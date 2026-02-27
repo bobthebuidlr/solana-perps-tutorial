@@ -34,10 +34,6 @@ pub struct PerpsMarket {
 
     /// Last funding update timestamp
     pub last_funding_update: i64,
-
-    /// Multiplier determining how OI imbalance affects mark price
-    /// Higher value = stronger impact
-    pub mark_adjustment_factor: u64,
 }
 
 #[account]

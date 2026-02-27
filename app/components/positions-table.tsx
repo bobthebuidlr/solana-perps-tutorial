@@ -218,7 +218,7 @@ export function PositionsTable() {
                   { label: "Market", align: "left" },
                   { label: "Size", align: "right" },
                   { label: "Entry Price", align: "right" },
-                  { label: "Mark Price", align: "right" },
+                  { label: "Oracle Price", align: "right" },
                   { label: "Price PnL", align: "right" },
                   { label: "Funding", align: "right" },
                   { label: "Collateral", align: "right" },

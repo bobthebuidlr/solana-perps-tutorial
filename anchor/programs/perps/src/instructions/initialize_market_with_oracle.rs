@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::{Markets, Oracle, OraclePrice, PerpsMarket, DEFAULT_MARK_ADJUSTMENT_FACTOR};
+use crate::{Markets, Oracle, OraclePrice, PerpsMarket};
 
 #[derive(Accounts)]
 pub struct InitializeMarketWithOracle<'info> {
@@ -32,7 +32,6 @@ pub fn handler(
         cumulative_funding_long: 0,
         cumulative_funding_short: 0,
         last_funding_update: clock.unix_timestamp,
-        mark_adjustment_factor: DEFAULT_MARK_ADJUSTMENT_FACTOR,
     };
 
     let oracle_price = OraclePrice {

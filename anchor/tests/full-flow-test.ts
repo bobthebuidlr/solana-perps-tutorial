@@ -464,8 +464,7 @@ describe("Full Flow Test", () => {
         .rpc();
       console.log("Oracle updated to $150. TX:", updateTx);
 
-      // Fetch on-chain position to get the actual entry price (may differ from
-      // INITIAL_PRICE if mark-price adjustment was applied at open time)
+      // Fetch on-chain position to get the actual entry price (oracle/spot price at open time)
       const position = await program.account.position.fetch(positionPda);
       console.log(
         "Entry price:",

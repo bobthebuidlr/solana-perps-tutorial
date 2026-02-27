@@ -1,8 +1,8 @@
 use anchor_lang::prelude::*;
 
 use crate::{
-    calculate_mark_price, constants::*, error::ErrorCode, update_funding_indices, Markets, Oracle,
-    Position, PositionDirection, UserAccount,
+    constants::*, error::ErrorCode, update_funding_indices, Markets, Oracle, Position,
+    PositionDirection, UserAccount,
 };
 
 #[derive(Accounts)]
@@ -65,18 +65,10 @@ pub fn handler(
     // Get current spot price from oracle
     let spot_price = oracle_price.price;
 
-    // Calculate current mark price based on open interest
-    let mark_price = calculate_mark_price(
-        spot_price,
-        perps_market.total_long_oi,
-        perps_market.total_short_oi,
-        perps_market.mark_adjustment_factor,
-    )?;
-
-    // Compute USDC collateral required: quantity * mark_price / 10^6
-    // Both size and mark_price are 6-decimal fixed point, so divide by 10^6 to get USDC base units
+    // Compute USDC collateral required: quantity * spot_price / 10^6
+    // Both size and spot_price are 6-decimal fixed point, so divide by 10^6 to get USDC base units
     let collateral_usdc = (size as u128)
-        .checked_mul(mark_price as u128)
+        .checked_mul(spot_price as u128)
         .ok_or(ErrorCode::ArithmeticOverflow)?
         .checked_div(1_000_000u128)
         .ok_or(ErrorCode::ArithmeticOverflow)? as u64;
@@ -91,7 +83,7 @@ pub fn handler(
     position.user_account = user_account.key();
     position.perps_market = perps_market.token_mint;
     position.direction = direction;
-    position.entry_price = mark_price;
+    position.entry_price = spot_price;
     position.position_size = size; // token quantity (6-decimal)
     position.collateral = collateral_usdc; // USDC collateral locked (6-decimal)
                                            // Store current cumulative funding index for this position
@@ -131,9 +123,8 @@ pub fn handler(
     msg!("Direction: {:?}", direction);
     msg!("Token quantity: {} (6-decimal)", size);
     msg!("Collateral locked: {} USDC (6-decimal)", collateral_usdc);
-    msg!("Entry price: {}", mark_price);
+    msg!("Entry price: {}", spot_price);
     msg!("Entry funding index: {}", position.entry_funding_index);
-    msg!("Spot price: {}", spot_price);
     msg!("Total Long OI: {}", perps_market.total_long_oi);
     msg!("Total Short OI: {}", perps_market.total_short_oi);
 
