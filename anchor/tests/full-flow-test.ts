@@ -24,9 +24,11 @@ describe("Full Flow Test", () => {
   // Test constants
   const SOL_MINT = new PublicKey("So11111111111111111111111111111111111111112");
   const MARKET_NAME = "SOL-PERP";
-  const INITIAL_PRICE = new BN(100_000_000); // $100 per SOL
-  const DEPOSIT_AMOUNT = new BN(1000_000_000); // 1000 USDC
-  const POSITION_SIZE = new BN(500_000_000); // 500 USDC position
+  const INITIAL_PRICE = new BN(100_000_000); // $100 per SOL (6-decimal fixed point)
+  const DEPOSIT_AMOUNT = new BN(1000_000_000); // 1000 USDC (6-decimal)
+  // Position size is now token quantity in 6-decimal precision (5 SOL = 5_000_000)
+  // At $100/SOL this costs $500 USDC collateral
+  const POSITION_SIZE = new BN(5_000_000); // 5 SOL (6-decimal token qty)
 
   let usdcMint: PublicKey;
   let userTokenAccount: PublicKey;
@@ -368,7 +370,7 @@ describe("Full Flow Test", () => {
         console.log("Transaction signature:", tx);
         console.log("Position PDA:", positionPda.toString());
         console.log("Direction: LONG");
-        console.log("Size: 500 USDC");
+        console.log("Size: 5 SOL (token quantity, 6-decimal)");
       }
 
       // Verify Position exists
@@ -384,12 +386,12 @@ describe("Full Flow Test", () => {
       console.log(
         "- Entry price:",
         position.entryPrice.toNumber() / 1_000_000,
-        "USDC"
+        "USD"
       );
       console.log(
         "- Position size:",
         position.positionSize.toNumber() / 1_000_000,
-        "USDC"
+        "SOL (token quantity)"
       );
       console.log(
         "- Collateral:",
@@ -498,10 +500,12 @@ describe("Full Flow Test", () => {
       );
       console.log("- Total PnL (raw):", positionInfo.pnlInfo.total.toString());
 
-      // Expected price PnL = position_size * (current_price − entry_price)
+      // Expected price PnL = position_size * (current_price − entry_price) / 10^6
+      // position_size is token qty (6-decimal), prices are 6-decimal fixed point
+      // dividing by 10^6 gives USDC base units
       const expectedPricePnl = POSITION_SIZE.mul(
         PROFIT_PRICE.sub(position.entryPrice)
-      );
+      ).div(new BN(1_000_000));
       console.log("Expected price PnL (raw):", expectedPricePnl.toString());
 
       assert.isDefined(
@@ -511,7 +515,7 @@ describe("Full Flow Test", () => {
       assert.equal(
         positionInfo.pnlInfo.price.toString(),
         expectedPricePnl.toString(),
-        "Price PnL should equal size * (currentPrice - entryPrice)"
+        "Price PnL should equal size * (currentPrice - entryPrice) / 10^6"
       );
       assert.isTrue(
         positionInfo.pnlInfo.price.gt(new BN(0)),
@@ -566,16 +570,17 @@ describe("Full Flow Test", () => {
       );
       console.log("- Total PnL (raw):", positionInfo.pnlInfo.total.toString());
 
-      // Expected price PnL = position_size * (current_price − entry_price) — negative
+      // Expected price PnL = position_size * (current_price − entry_price) / 10^6 — negative
+      // position_size is token qty (6-decimal), prices are 6-decimal fixed point
       const expectedPricePnl = POSITION_SIZE.mul(
         LOSS_PRICE.sub(position.entryPrice)
-      );
+      ).div(new BN(1_000_000));
       console.log("Expected price PnL (raw):", expectedPricePnl.toString());
 
       assert.equal(
         positionInfo.pnlInfo.price.toString(),
         expectedPricePnl.toString(),
-        "Price PnL should equal size * (currentPrice - entryPrice)"
+        "Price PnL should equal size * (currentPrice - entryPrice) / 10^6"
       );
       assert.isTrue(
         positionInfo.pnlInfo.price.isNeg(),
@@ -626,12 +631,12 @@ describe("Full Flow Test", () => {
       console.log(
         "✓ Position size:",
         position.positionSize.toNumber() / 1_000_000,
-        "USDC"
+        "SOL (token quantity)"
       );
       console.log(
         "✓ Position entry price:",
         position.entryPrice.toNumber() / 1_000_000,
-        "USDC"
+        "USD"
       );
 
       console.log("\n✅ All verifications passed!");

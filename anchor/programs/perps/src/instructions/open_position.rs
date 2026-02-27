@@ -40,16 +40,13 @@ pub fn handler(
     ctx: Context<OpenPosition>,
     token_mint: Pubkey,
     direction: PositionDirection,
-    size: u64,
+    size: u64, // token quantity in 6-decimal fixed point (e.g. 1 SOL = 1_000_000)
 ) -> Result<()> {
     let oracle = &mut ctx.accounts.oracle;
     let user_account = &mut ctx.accounts.user_account;
     let position = &mut ctx.accounts.position;
     let markets = &mut ctx.accounts.markets;
     let clock = Clock::get()?;
-
-    let available = user_account.available_collateral()?;
-    require!(available >= size, ErrorCode::InsufficientCollateral);
 
     // CRITICAL: Update funding indices BEFORE OI changes
     update_funding_indices(&mut markets.perps, clock.unix_timestamp)?;
@@ -76,14 +73,28 @@ pub fn handler(
         perps_market.mark_adjustment_factor,
     )?;
 
+    // Compute USDC collateral required: quantity * mark_price / 10^6
+    // Both size and mark_price are 6-decimal fixed point, so divide by 10^6 to get USDC base units
+    let collateral_usdc = (size as u128)
+        .checked_mul(mark_price as u128)
+        .ok_or(ErrorCode::ArithmeticOverflow)?
+        .checked_div(1_000_000u128)
+        .ok_or(ErrorCode::ArithmeticOverflow)? as u64;
+
+    let available = user_account.available_collateral()?;
+    require!(
+        available >= collateral_usdc,
+        ErrorCode::InsufficientCollateral
+    );
+
     // Initialize position
     position.user_account = user_account.key();
     position.perps_market = perps_market.token_mint;
     position.direction = direction;
     position.entry_price = mark_price;
-    position.position_size = size;
-    position.collateral = size; // 1x leverage: collateral = size
-                                // Store current cumulative funding index for this position
+    position.position_size = size; // token quantity (6-decimal)
+    position.collateral = collateral_usdc; // USDC collateral locked (6-decimal)
+                                           // Store current cumulative funding index for this position
     position.entry_funding_index = match direction {
         PositionDirection::Long => perps_market.cumulative_funding_long,
         PositionDirection::Short => perps_market.cumulative_funding_short,
@@ -91,34 +102,35 @@ pub fn handler(
     position.opened_at = clock.unix_timestamp;
     position.bump = ctx.bumps.position;
 
-    // Lock collateral in user account
+    // Lock USDC collateral in user account
     user_account.locked_collateral = user_account
         .locked_collateral
-        .checked_add(size)
+        .checked_add(collateral_usdc)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
 
     // Add position to user's position list
     user_account.positions.push(position.key());
 
-    // Update market open interest
+    // Update market open interest in USDC terms
     match direction {
         PositionDirection::Long => {
             perps_market.total_long_oi = perps_market
                 .total_long_oi
-                .checked_add(size)
+                .checked_add(collateral_usdc)
                 .ok_or(ErrorCode::ArithmeticOverflow)?;
         }
         PositionDirection::Short => {
             perps_market.total_short_oi = perps_market
                 .total_short_oi
-                .checked_add(size)
+                .checked_add(collateral_usdc)
                 .ok_or(ErrorCode::ArithmeticOverflow)?;
         }
     }
 
     msg!("Position opened successfully");
     msg!("Direction: {:?}", direction);
-    msg!("Size: {} USDC", size);
+    msg!("Token quantity: {} (6-decimal)", size);
+    msg!("Collateral locked: {} USDC (6-decimal)", collateral_usdc);
     msg!("Entry price: {}", mark_price);
     msg!("Entry funding index: {}", position.entry_funding_index);
     msg!("Spot price: {}", spot_price);

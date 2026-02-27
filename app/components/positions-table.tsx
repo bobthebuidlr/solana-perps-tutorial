@@ -11,6 +11,7 @@ import { usePositionPnl } from "../hooks/usePositionPnl";
 import { usePositions } from "../hooks/usePositions";
 
 const USDC_DECIMALS = 6;
+const TOKEN_DECIMALS = 6; // position_size stored with 6-decimal precision
 
 /**
  * Formats a raw u64 USDC amount into a two-decimal display string.
@@ -22,6 +23,19 @@ function formatUsdc(amount: bigint): string {
   return n.toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
+  });
+}
+
+/**
+ * Formats a raw u64 token quantity (6-decimal precision) into a display string.
+ * @param amount - Token quantity in base units (10^6 = 1 token).
+ * @returns e.g. "1.000000" or "0.500000"
+ */
+function formatTokenQty(amount: bigint): string {
+  const n = Number(amount) / 10 ** TOKEN_DECIMALS;
+  return n.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 6,
   });
 }
 
@@ -292,12 +306,12 @@ function PositionRow({
         </div>
       </td>
 
-      {/* Size */}
+      {/* Size — token quantity */}
       <td className="py-3.5 px-4 text-right">
         <p className="font-mono tabular-nums">
-          {formatUsdc(position.positionSize)}
+          {formatTokenQty(position.positionSize)}
         </p>
-        <p className="text-xs text-muted">USDC</p>
+        <p className="text-xs text-muted">{symbol}</p>
       </td>
 
       {/* Entry price */}

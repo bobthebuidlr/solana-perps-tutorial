@@ -49,30 +49,38 @@ pub fn calculate_mark_price(
     Ok(mark_price as u64)
 }
 
+/// Calculate price-based PnL for a position.
+/// position_size is token quantity (6-decimal), prices are 6-decimal fixed point.
+/// Returns PnL in USDC base units (6-decimal).
+/// @param position - The open position account.
+/// @param current_price - Current oracle price (6-decimal fixed point).
+/// @returns Signed PnL in USDC base units (positive = profit, negative = loss).
 pub fn calculate_price_pnl(position: &Position, current_price: u64) -> Result<i64> {
-    let value_before: i64 = position
-        .position_size
-        .checked_mul(position.entry_price)
-        .ok_or(ErrorCode::ArithmeticOverflow)? as i64;
-    let value_after: i64 = position
-        .position_size
-        .checked_mul(current_price)
-        .ok_or(ErrorCode::ArithmeticOverflow)? as i64;
+    let size = position.position_size as i128;
+    let entry = position.entry_price as i128;
+    let current = current_price as i128;
 
-    return match position.direction {
-        PositionDirection::Long => {
-            let pnl: i64 = value_after
-                .checked_sub(value_before)
-                .ok_or(ErrorCode::ArithmeticOverflow)? as i64;
-            Ok(pnl)
-        }
-        PositionDirection::Short => {
-            let pnl: i64 = value_before
-                .checked_sub(value_after)
-                .ok_or(ErrorCode::ArithmeticOverflow)? as i64;
-            Ok(pnl)
-        }
-    };
+    // value = token_qty * price / 10^6 → USDC base units
+    let value_before = size
+        .checked_mul(entry)
+        .ok_or(ErrorCode::ArithmeticOverflow)?
+        .checked_div(1_000_000)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+    let value_after = size
+        .checked_mul(current)
+        .ok_or(ErrorCode::ArithmeticOverflow)?
+        .checked_div(1_000_000)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+    match position.direction {
+        PositionDirection::Long => Ok(value_after
+            .checked_sub(value_before)
+            .ok_or(ErrorCode::ArithmeticOverflow)? as i64),
+        PositionDirection::Short => Ok(value_before
+            .checked_sub(value_after)
+            .ok_or(ErrorCode::ArithmeticOverflow)? as i64),
+    }
 }
 
 /// Calculate the current funding rate based on OI imbalance
@@ -248,12 +256,14 @@ pub fn calculate_funding_pnl(
         .checked_sub(position.entry_funding_index)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
 
-    // Calculate funding PnL
+    // Calculate funding PnL using USDC collateral as the notional value.
+    // position.collateral holds the USDC amount locked for this position, giving
+    // funding payments in USDC base units consistent with price PnL.
     let funding_pnl = match position.direction {
         PositionDirection::Long => {
             // Longs pay when index increases (negative PnL)
             let payment = index_diff
-                .checked_mul(position.position_size as i128)
+                .checked_mul(position.collateral as i128)
                 .ok_or(ErrorCode::ArithmeticOverflow)?
                 .checked_div(FUNDING_RATE_BASE as i128)
                 .ok_or(ErrorCode::ArithmeticOverflow)?;
@@ -262,7 +272,7 @@ pub fn calculate_funding_pnl(
         PositionDirection::Short => {
             // Shorts receive when longs pay (positive PnL when index decreases)
             let payment = index_diff
-                .checked_mul(position.position_size as i128)
+                .checked_mul(position.collateral as i128)
                 .ok_or(ErrorCode::ArithmeticOverflow)?
                 .checked_div(FUNDING_RATE_BASE as i128)
                 .ok_or(ErrorCode::ArithmeticOverflow)?;

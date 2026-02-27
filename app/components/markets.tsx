@@ -9,10 +9,12 @@ import { useCollateral } from "../hooks/useCollateral";
 import { useDeposit } from "../hooks/useDeposit";
 import { useMarkets } from "../hooks/useMarkets";
 import { useOpenPosition } from "../hooks/useOpenPosition";
+import { useOraclePrices } from "../hooks/useOraclePrices";
 import { useTokenAccount } from "../hooks/useTokenAccount";
 import { useTokenBalance } from "../hooks/useTokenBalance";
 
 const USDC_DECIMALS = 6;
+const TOKEN_DECIMALS = 6; // position size stored with 6-decimal precision
 const USDC_MINT_ADDRESS =
   "3xcGW4uvAGbfiPUieTJLg4fMbL3SposFqRJp5WgTzooL" as Address;
 
@@ -263,7 +265,7 @@ function MarketRow({
 
 /**
  * Order form for the selected market. Handles collateral check,
- * direction toggle, size input, and submitting the open-position tx.
+ * direction toggle, size input (in token quantity), and submitting the open-position tx.
  * @param market - The currently selected market, or null.
  */
 function OrderForm({ market }: { market: PerpsMarket | null }) {
@@ -279,6 +281,7 @@ function OrderForm({ market }: { market: PerpsMarket | null }) {
     isLoading: isOpening,
     error: openError,
   } = useOpenPosition();
+  const { prices: oraclePrices, isLoading: pricesLoading } = useOraclePrices();
 
   const [direction, setDirection] = useState<PositionDirection>(
     PositionDirection.Long
@@ -290,7 +293,20 @@ function OrderForm({ market }: { market: PerpsMarket | null }) {
   const walletAddress = wallet?.account.address;
   const availableCollateral = collateral ?? 0n;
   const hasCollateral = availableCollateral > 0n;
-  const maxSizeUsdc = Number(availableCollateral) / 10 ** USDC_DECIMALS;
+
+  // Look up oracle price for the selected market
+  const oraclePrice =
+    oraclePrices?.find(
+      (p) => p.tokenMint.toString() === market?.tokenMint.toString()
+    )?.price ?? null;
+
+  // Max token quantity user can take: available_collateral / oracle_price
+  // Both in 6-decimal fixed point, so multiply by 10^6 to keep precision
+  const maxQtyBase =
+    oraclePrice && oraclePrice > 0n && availableCollateral > 0n
+      ? (availableCollateral * BigInt(10 ** TOKEN_DECIMALS)) / oraclePrice
+      : 0n;
+  const maxQtyDisplay = Number(maxQtyBase) / 10 ** TOKEN_DECIMALS;
 
   // Reset form whenever the selected market changes
   useEffect(() => {
@@ -299,16 +315,15 @@ function OrderForm({ market }: { market: PerpsMarket | null }) {
   }, [market?.tokenMint.toString()]);
 
   /**
-   * Submits the open-position transaction.
+   * Submits the open-position transaction with token quantity as size.
    */
   const handleOpenPosition = async () => {
     if (!market || !walletAddress || !sizeInput || parseFloat(sizeInput) <= 0)
       return;
     setTxSuccess(false);
-    const amountLamports = Math.floor(
-      parseFloat(sizeInput) * 10 ** USDC_DECIMALS
-    );
-    const sig = await openPosition(market.tokenMint, direction, amountLamports);
+    // Convert token quantity to 6-decimal base units (e.g. 1.5 SOL → 1_500_000)
+    const qtyBase = Math.floor(parseFloat(sizeInput) * 10 ** TOKEN_DECIMALS);
+    const sig = await openPosition(market.tokenMint, direction, qtyBase);
     if (sig) {
       setTxSuccess(true);
       setSizeInput("");
@@ -324,7 +339,7 @@ function OrderForm({ market }: { market: PerpsMarket | null }) {
     );
   }
 
-  if (collateralLoading) {
+  if (collateralLoading || pricesLoading) {
     return (
       <div className="space-y-3 pt-2">
         <div className="h-9 animate-pulse rounded-xl bg-cream/50" />
@@ -336,8 +351,17 @@ function OrderForm({ market }: { market: PerpsMarket | null }) {
 
   const symbol = market ? getSymbol(market.name) : "";
   const colorClass = market ? iconColorClass(market.name) : "";
-  const parsedSize = parseFloat(sizeInput) || 0;
-  const sizeValid = parsedSize > 0 && parsedSize <= maxSizeUsdc;
+  const parsedQty = parseFloat(sizeInput) || 0;
+  const parsedQtyBase = BigInt(Math.floor(parsedQty * 10 ** TOKEN_DECIMALS));
+
+  // Collateral cost in USDC base units: qty * oracle_price / 10^6
+  const collateralCost =
+    oraclePrice && parsedQtyBase > 0n
+      ? (parsedQtyBase * oraclePrice) / BigInt(10 ** TOKEN_DECIMALS)
+      : 0n;
+
+  const sizeValid =
+    parsedQty > 0 && oraclePrice !== null && collateralCost <= availableCollateral;
 
   // No collateral deposited yet
   if (!hasCollateral) {
@@ -386,7 +410,7 @@ function OrderForm({ market }: { market: PerpsMarket | null }) {
   return (
     <>
       <div className="space-y-4">
-        {/* Market + available collateral header */}
+        {/* Market header + available collateral */}
         <div className="flex items-center justify-between">
           {market && (
             <MarketHeader
@@ -403,6 +427,23 @@ function OrderForm({ market }: { market: PerpsMarket | null }) {
             </p>
           </div>
         </div>
+
+        {/* Oracle price display */}
+        {market && (
+          <div className="rounded-lg bg-cream/30 px-3 py-2 text-xs text-muted">
+            <span>Mark price: </span>
+            <span className="font-mono font-semibold text-foreground">
+              {oraclePrice !== null
+                ? `$${(Number(oraclePrice) / 10 ** USDC_DECIMALS).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                : "—"}
+            </span>
+            {oraclePrice !== null && maxQtyDisplay > 0 && (
+              <span className="ml-2">
+                · Max: {maxQtyDisplay.toLocaleString("en-US", { maximumFractionDigits: 6 })} {symbol}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Long / Short direction toggle */}
         <div className="grid grid-cols-2 gap-1 rounded-xl border border-border-low bg-cream/30 p-1">
@@ -428,17 +469,27 @@ function OrderForm({ market }: { market: PerpsMarket | null }) {
           </button>
         </div>
 
-        {/* Position size input */}
+        {/* Position size input (token quantity) */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <label className="text-xs font-medium uppercase tracking-wide text-muted">
-              Size (USDC)
+              Size {market ? `(${symbol})` : ""}
             </label>
             <button
-              onClick={() => setSizeInput(maxSizeUsdc.toFixed(2))}
-              className="text-xs font-medium text-muted transition hover:text-foreground"
+              onClick={() =>
+                setSizeInput(
+                  maxQtyDisplay.toLocaleString("en-US", {
+                    maximumFractionDigits: 6,
+                    useGrouping: false,
+                  })
+                )
+              }
+              disabled={!oraclePrice || maxQtyDisplay <= 0}
+              className="text-xs font-medium text-muted transition hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
             >
-              Max: {formatUsdc(availableCollateral)}
+              Max: {maxQtyDisplay > 0
+                ? `${maxQtyDisplay.toLocaleString("en-US", { maximumFractionDigits: 4 })} ${symbol}`
+                : "—"}
             </button>
           </div>
           <div className="relative">
@@ -446,19 +497,21 @@ function OrderForm({ market }: { market: PerpsMarket | null }) {
               type="number"
               value={sizeInput}
               onChange={(e) => setSizeInput(e.target.value)}
-              placeholder="0.00"
-              step="0.01"
+              placeholder="0.000000"
+              step="0.000001"
               min="0"
-              max={maxSizeUsdc}
-              disabled={isOpening}
+              disabled={isOpening || !oraclePrice}
               className="w-full rounded-xl border border-border-low bg-card px-4 py-3 pr-16 text-lg font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-foreground/20 disabled:opacity-50"
             />
             <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">
-              USDC
+              {symbol || "—"}
             </span>
           </div>
-          {parsedSize > maxSizeUsdc && maxSizeUsdc > 0 && (
+          {parsedQty > 0 && oraclePrice !== null && collateralCost > availableCollateral && (
             <p className="text-xs text-red-500">Exceeds available collateral</p>
+          )}
+          {!oraclePrice && market && (
+            <p className="text-xs text-muted">Waiting for oracle price…</p>
           )}
         </div>
 
@@ -477,13 +530,20 @@ function OrderForm({ market }: { market: PerpsMarket | null }) {
           </SummaryRow>
           <SummaryRow label="Size">
             <span className="font-mono tabular-nums">
-              {parsedSize > 0 ? `${sizeInput} USDC` : "—"}
+              {parsedQty > 0 ? `${sizeInput} ${symbol}` : "—"}
+            </span>
+          </SummaryRow>
+          <SummaryRow label="Cost">
+            <span className="font-mono tabular-nums">
+              {parsedQty > 0 && oraclePrice !== null
+                ? `${formatUsdc(collateralCost)} USDC`
+                : "—"}
             </span>
           </SummaryRow>
           <SummaryRow label="Available after">
             <span className="font-mono tabular-nums">
-              {parsedSize > 0
-                ? `${Math.max(0, maxSizeUsdc - parsedSize).toFixed(2)} USDC`
+              {parsedQty > 0 && oraclePrice !== null
+                ? `${formatUsdc(availableCollateral > collateralCost ? availableCollateral - collateralCost : 0n)} USDC`
                 : `${formatUsdc(availableCollateral)} USDC`}
             </span>
           </SummaryRow>
