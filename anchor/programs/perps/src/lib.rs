@@ -57,4 +57,12 @@ pub mod perps {
     pub fn update_funding(ctx: Context<UpdateFunding>) -> Result<()> {
         update_funding::handler(ctx)
     }
+
+    pub fn close_position(ctx: Context<ClosePosition>, token_mint: Pubkey) -> Result<()> {
+        close_position::handler(ctx, token_mint)
+    }
+
+    pub fn withdraw_collateral(ctx: Context<WithdrawCollateral>) -> Result<()> {
+        withdraw_collateral::handler(ctx)
+    }
 }

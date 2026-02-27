@@ -55,4 +55,7 @@ pub enum ErrorCode {
 
     #[msg("Market not found")]
     MarketNotFound,
+
+    #[msg("Vault has insufficient funds to pay settlement")]
+    InsufficientVaultFunds,
 }

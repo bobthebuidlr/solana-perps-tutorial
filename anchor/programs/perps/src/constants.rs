@@ -18,6 +18,9 @@ pub const USER_SEED: &[u8] = b"user";
 #[constant]
 pub const POSITION_SEED: &[u8] = b"position";
 
+#[constant]
+pub const VAULT_SEED: &[u8] = b"vault";
+
 pub const ANCHOR_DISCRIMINATOR: usize = 8;
 
 pub const MAX_POSITIONS: usize = 2;

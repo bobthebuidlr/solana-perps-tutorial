@@ -3,8 +3,6 @@ use anchor_spl::token::{Mint, Token, TokenAccount};
 
 use crate::{constants::*, Markets, Oracle, ANCHOR_DISCRIMINATOR};
 
-const VAULT_SEED: &[u8] = b"vault";
-
 #[derive(Accounts)]
 pub struct Initialize<'info> {
     #[account(mut)]

@@ -6,6 +6,7 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from "./closePosition";
 export * from "./depositCollateral";
 export * from "./initialize";
 export * from "./initializeMarketWithOracle";
@@ -13,3 +14,4 @@ export * from "./openPosition";
 export * from "./updateFunding";
 export * from "./updateOracle";
 export * from "./viewPositionPnl";
+export * from "./withdrawCollateral";

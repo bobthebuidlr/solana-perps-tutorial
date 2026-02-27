@@ -50,6 +50,8 @@ export const PERPS_ERROR__ORACLE_PRICE_CHANGE_EXCESSIVE = 0x177f; // 6015
 export const PERPS_ERROR__ORACLE_PRICE_NOT_FOUND = 0x1780; // 6016
 /** MarketNotFound: Market not found */
 export const PERPS_ERROR__MARKET_NOT_FOUND = 0x1781; // 6017
+/** InsufficientVaultFunds: Vault has insufficient funds to pay settlement */
+export const PERPS_ERROR__INSUFFICIENT_VAULT_FUNDS = 0x1782; // 6018
 
 export type PerpsError =
   | typeof PERPS_ERROR__ARITHMETIC_OVERFLOW
@@ -57,6 +59,7 @@ export type PerpsError =
   | typeof PERPS_ERROR__CUSTOM_ERROR
   | typeof PERPS_ERROR__FUNDING_NOT_DUE
   | typeof PERPS_ERROR__INSUFFICIENT_COLLATERAL
+  | typeof PERPS_ERROR__INSUFFICIENT_VAULT_FUNDS
   | typeof PERPS_ERROR__INVALID_AMOUNT
   | typeof PERPS_ERROR__INVALID_COLLATERAL_STATE
   | typeof PERPS_ERROR__INVALID_POSITION_DIRECTION
@@ -79,6 +82,7 @@ if (process.env.NODE_ENV !== "production") {
     [PERPS_ERROR__CUSTOM_ERROR]: `Custom error message`,
     [PERPS_ERROR__FUNDING_NOT_DUE]: `Funding rate update not due yet`,
     [PERPS_ERROR__INSUFFICIENT_COLLATERAL]: `Insufficient collateral to perform this operation`,
+    [PERPS_ERROR__INSUFFICIENT_VAULT_FUNDS]: `Vault has insufficient funds to pay settlement`,
     [PERPS_ERROR__INVALID_AMOUNT]: `Invalid amount`,
     [PERPS_ERROR__INVALID_COLLATERAL_STATE]: `Available collateral is less than locked collateral`,
     [PERPS_ERROR__INVALID_POSITION_DIRECTION]: `Invalid position direction specified`,

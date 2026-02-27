@@ -17,6 +17,7 @@ import {
   type ReadonlyUint8Array,
 } from "@solana/kit";
 import {
+  parseClosePositionInstruction,
   parseDepositCollateralInstruction,
   parseInitializeInstruction,
   parseInitializeMarketWithOracleInstruction,
@@ -24,6 +25,8 @@ import {
   parseUpdateFundingInstruction,
   parseUpdateOracleInstruction,
   parseViewPositionPnlInstruction,
+  parseWithdrawCollateralInstruction,
+  type ParsedClosePositionInstruction,
   type ParsedDepositCollateralInstruction,
   type ParsedInitializeInstruction,
   type ParsedInitializeMarketWithOracleInstruction,
@@ -31,6 +34,7 @@ import {
   type ParsedUpdateFundingInstruction,
   type ParsedUpdateOracleInstruction,
   type ParsedViewPositionPnlInstruction,
+  type ParsedWithdrawCollateralInstruction,
 } from "../instructions";
 
 export const PERPS_PROGRAM_ADDRESS =
@@ -97,6 +101,7 @@ export function identifyPerpsAccount(
 }
 
 export enum PerpsInstruction {
+  ClosePosition,
   DepositCollateral,
   Initialize,
   InitializeMarketWithOracle,
@@ -104,12 +109,24 @@ export enum PerpsInstruction {
   UpdateFunding,
   UpdateOracle,
   ViewPositionPnl,
+  WithdrawCollateral,
 }
 
 export function identifyPerpsInstruction(
   instruction: { data: ReadonlyUint8Array } | ReadonlyUint8Array,
 ): PerpsInstruction {
   const data = "data" in instruction ? instruction.data : instruction;
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([123, 134, 81, 0, 49, 68, 98, 98]),
+      ),
+      0,
+    )
+  ) {
+    return PerpsInstruction.ClosePosition;
+  }
   if (
     containsBytes(
       data,
@@ -187,6 +204,17 @@ export function identifyPerpsInstruction(
   ) {
     return PerpsInstruction.ViewPositionPnl;
   }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([115, 135, 168, 106, 139, 214, 138, 150]),
+      ),
+      0,
+    )
+  ) {
+    return PerpsInstruction.WithdrawCollateral;
+  }
   throw new Error(
     "The provided instruction could not be identified as a perps instruction.",
   );
@@ -195,6 +223,9 @@ export function identifyPerpsInstruction(
 export type ParsedPerpsInstruction<
   TProgram extends string = "6q2SoxHGceNGtQbf3fwYWZwPQkP14yDbLjhythtPkB7P",
 > =
+  | ({
+      instructionType: PerpsInstruction.ClosePosition;
+    } & ParsedClosePositionInstruction<TProgram>)
   | ({
       instructionType: PerpsInstruction.DepositCollateral;
     } & ParsedDepositCollateralInstruction<TProgram>)
@@ -215,13 +246,23 @@ export type ParsedPerpsInstruction<
     } & ParsedUpdateOracleInstruction<TProgram>)
   | ({
       instructionType: PerpsInstruction.ViewPositionPnl;
-    } & ParsedViewPositionPnlInstruction<TProgram>);
+    } & ParsedViewPositionPnlInstruction<TProgram>)
+  | ({
+      instructionType: PerpsInstruction.WithdrawCollateral;
+    } & ParsedWithdrawCollateralInstruction<TProgram>);
 
 export function parsePerpsInstruction<TProgram extends string>(
   instruction: Instruction<TProgram> & InstructionWithData<ReadonlyUint8Array>,
 ): ParsedPerpsInstruction<TProgram> {
   const instructionType = identifyPerpsInstruction(instruction);
   switch (instructionType) {
+    case PerpsInstruction.ClosePosition: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: PerpsInstruction.ClosePosition,
+        ...parseClosePositionInstruction(instruction),
+      };
+    }
     case PerpsInstruction.DepositCollateral: {
       assertIsInstructionWithAccounts(instruction);
       return {
@@ -269,6 +310,13 @@ export function parsePerpsInstruction<TProgram extends string>(
       return {
         instructionType: PerpsInstruction.ViewPositionPnl,
         ...parseViewPositionPnlInstruction(instruction),
+      };
+    }
+    case PerpsInstruction.WithdrawCollateral: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: PerpsInstruction.WithdrawCollateral,
+        ...parseWithdrawCollateralInstruction(instruction),
       };
     }
     default:

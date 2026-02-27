@@ -45,11 +45,6 @@ export type PerpsMarket = {
   cumulativeFundingShort: bigint;
   /** Last funding update timestamp */
   lastFundingUpdate: bigint;
-  /**
-   * Multiplier determining how OI imbalance affects mark price
-   * Higher value = stronger impact
-   */
-  markAdjustmentFactor: bigint;
 };
 
 export type PerpsMarketArgs = {
@@ -67,11 +62,6 @@ export type PerpsMarketArgs = {
   cumulativeFundingShort: number | bigint;
   /** Last funding update timestamp */
   lastFundingUpdate: number | bigint;
-  /**
-   * Multiplier determining how OI imbalance affects mark price
-   * Higher value = stronger impact
-   */
-  markAdjustmentFactor: number | bigint;
 };
 
 export function getPerpsMarketEncoder(): Encoder<PerpsMarketArgs> {
@@ -83,7 +73,6 @@ export function getPerpsMarketEncoder(): Encoder<PerpsMarketArgs> {
     ["cumulativeFundingLong", getI128Encoder()],
     ["cumulativeFundingShort", getI128Encoder()],
     ["lastFundingUpdate", getI64Encoder()],
-    ["markAdjustmentFactor", getU64Encoder()],
   ]);
 }
 
@@ -96,7 +85,6 @@ export function getPerpsMarketDecoder(): Decoder<PerpsMarket> {
     ["cumulativeFundingLong", getI128Decoder()],
     ["cumulativeFundingShort", getI128Decoder()],
     ["lastFundingUpdate", getI64Decoder()],
-    ["markAdjustmentFactor", getU64Decoder()],
   ]);
 }
 
