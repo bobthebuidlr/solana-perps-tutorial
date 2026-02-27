@@ -15,6 +15,7 @@
     "lint": "eslint",
     "setup": "npm run anchor-build && npm run codama:js",
     "start": "next start",
+    "update-oracle": "tsx anchor/scripts/update-oracle.ts",
     "workflow": "npm run anchor-build && npm run anchor-deploy && npm run init-program && npm run create-markets"
   },
   "description": "Next.js, Tailwind, @solana/react-hooks, Anchor vault program",

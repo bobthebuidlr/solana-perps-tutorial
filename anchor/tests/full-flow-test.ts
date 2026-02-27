@@ -445,6 +445,154 @@ describe("Full Flow Test", () => {
     });
   });
 
+  describe("Step 5: View Position PnL", () => {
+    // Raw oracle prices: price_usd * 1_000_000 (6-decimal precision)
+    const PROFIT_PRICE = new BN(150_000_000); // $150 — 50% above $100 entry
+    const LOSS_PRICE = new BN(80_000_000); // $80 — 20% below $100 entry
+
+    it("should return positive price PnL for a LONG when oracle price increases", async () => {
+      console.log(
+        "\n🚀 Step 5a: PnL check — price increase (LONG in profit)..."
+      );
+
+      // Update oracle to the profit price
+      const updateTx = await program.methods
+        .updateOracle(SOL_MINT, PROFIT_PRICE)
+        .accounts({ oracle: oraclePda })
+        .rpc();
+      console.log("Oracle updated to $150. TX:", updateTx);
+
+      // Fetch on-chain position to get the actual entry price (may differ from
+      // INITIAL_PRICE if mark-price adjustment was applied at open time)
+      const position = await program.account.position.fetch(positionPda);
+      console.log(
+        "Entry price:",
+        position.entryPrice.toNumber() / 1_000_000,
+        "USD"
+      );
+
+      // Simulate the view instruction and receive the returned PositionInfo
+      const positionInfo = await program.methods
+        .viewPositionPnl(SOL_MINT)
+        .accounts({
+          markets: marketsPda,
+          position: positionPda,
+          oracle: oraclePda,
+        })
+        .view();
+
+      console.log("\nPosition Info:");
+      console.log(
+        "- Direction:",
+        positionInfo.direction.long ? "LONG" : "SHORT"
+      );
+      console.log(
+        "- Entry price:",
+        positionInfo.entryPrice.toNumber() / 1_000_000,
+        "USD"
+      );
+      console.log("- Price PnL (raw):", positionInfo.pnlInfo.price.toString());
+      console.log(
+        "- Funding PnL (raw):",
+        positionInfo.pnlInfo.funding.toString()
+      );
+      console.log("- Total PnL (raw):", positionInfo.pnlInfo.total.toString());
+
+      // Expected price PnL = position_size * (current_price − entry_price)
+      const expectedPricePnl = POSITION_SIZE.mul(
+        PROFIT_PRICE.sub(position.entryPrice)
+      );
+      console.log("Expected price PnL (raw):", expectedPricePnl.toString());
+
+      assert.isDefined(
+        positionInfo.direction.long,
+        "Direction should be LONG"
+      );
+      assert.equal(
+        positionInfo.pnlInfo.price.toString(),
+        expectedPricePnl.toString(),
+        "Price PnL should equal size * (currentPrice - entryPrice)"
+      );
+      assert.isTrue(
+        positionInfo.pnlInfo.price.gt(new BN(0)),
+        "Price PnL should be positive when oracle price exceeds entry price"
+      );
+      // Total PnL must be price PnL + funding PnL
+      assert.equal(
+        positionInfo.pnlInfo.total.toString(),
+        positionInfo.pnlInfo.price
+          .add(positionInfo.pnlInfo.funding)
+          .toString(),
+        "Total PnL should be the sum of price PnL and funding PnL"
+      );
+      console.log("✓ LONG position shows positive PnL on price increase");
+    });
+
+    it("should return negative price PnL for a LONG when oracle price decreases", async () => {
+      console.log(
+        "\n🚀 Step 5b: PnL check — price decrease (LONG at a loss)..."
+      );
+
+      // Update oracle to the loss price
+      const updateTx = await program.methods
+        .updateOracle(SOL_MINT, LOSS_PRICE)
+        .accounts({ oracle: oraclePda })
+        .rpc();
+      console.log("Oracle updated to $80. TX:", updateTx);
+
+      // Fetch on-chain position to get the actual entry price
+      const position = await program.account.position.fetch(positionPda);
+      console.log(
+        "Entry price:",
+        position.entryPrice.toNumber() / 1_000_000,
+        "USD"
+      );
+
+      // Simulate the view instruction and receive the returned PositionInfo
+      const positionInfo = await program.methods
+        .viewPositionPnl(SOL_MINT)
+        .accounts({
+          markets: marketsPda,
+          position: positionPda,
+          oracle: oraclePda,
+        })
+        .view();
+
+      console.log("\nPosition Info:");
+      console.log("- Price PnL (raw):", positionInfo.pnlInfo.price.toString());
+      console.log(
+        "- Funding PnL (raw):",
+        positionInfo.pnlInfo.funding.toString()
+      );
+      console.log("- Total PnL (raw):", positionInfo.pnlInfo.total.toString());
+
+      // Expected price PnL = position_size * (current_price − entry_price) — negative
+      const expectedPricePnl = POSITION_SIZE.mul(
+        LOSS_PRICE.sub(position.entryPrice)
+      );
+      console.log("Expected price PnL (raw):", expectedPricePnl.toString());
+
+      assert.equal(
+        positionInfo.pnlInfo.price.toString(),
+        expectedPricePnl.toString(),
+        "Price PnL should equal size * (currentPrice - entryPrice)"
+      );
+      assert.isTrue(
+        positionInfo.pnlInfo.price.isNeg(),
+        "Price PnL should be negative when oracle price is below entry price"
+      );
+      // Total PnL must be price PnL + funding PnL
+      assert.equal(
+        positionInfo.pnlInfo.total.toString(),
+        positionInfo.pnlInfo.price
+          .add(positionInfo.pnlInfo.funding)
+          .toString(),
+        "Total PnL should be the sum of price PnL and funding PnL"
+      );
+      console.log("✓ LONG position shows negative PnL on price decrease");
+    });
+  });
+
   describe("Verification", () => {
     it("should verify the complete state after all operations", async () => {
       console.log("\n🔍 Final Verification:");

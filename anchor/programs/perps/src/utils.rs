@@ -49,7 +49,7 @@ pub fn calculate_mark_price(
     Ok(mark_price as u64)
 }
 
-pub fn calculate_pnl(position: &Position, current_price: u64) -> Result<i64> {
+pub fn calculate_price_pnl(position: &Position, current_price: u64) -> Result<i64> {
     let value_before: i64 = position
         .position_size
         .checked_mul(position.entry_price)

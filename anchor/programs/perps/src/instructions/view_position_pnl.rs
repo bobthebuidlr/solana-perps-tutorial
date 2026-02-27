@@ -1,8 +1,8 @@
 use anchor_lang::prelude::*;
 
 use crate::{
-    calculate_funding_pnl, calculate_pnl, error::ErrorCode, Markets, Oracle, PnlInfo, Position,
-    PositionInfo,
+    calculate_funding_pnl, calculate_price_pnl, error::ErrorCode, Markets, Oracle, PnlInfo,
+    Position, PositionInfo,
 };
 
 #[derive(Accounts)]
@@ -33,7 +33,7 @@ pub fn handler(ctx: Context<ViewPositionPnl>, token_mint: Pubkey) -> Result<Posi
         .ok_or(error!(ErrorCode::MarketNotFound))?;
 
     // Calculate price-based PnL
-    let pnl = calculate_pnl(position, oracle_price.price)?;
+    let pnl = calculate_price_pnl(position, oracle_price.price)?;
 
     // Calculate accumulated funding PnL (calculates current indices without mutating)
     let funding_pnl = calculate_funding_pnl(position, perps_market, Some(clock.unix_timestamp))?;
