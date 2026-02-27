@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useCollateral } from "../hooks/useCollateral";
 import { useDeposit } from "../hooks/useDeposit";
 import { useTokenAccount } from "../hooks/useTokenAccount";
+import { useTokenBalance } from "../hooks/useTokenBalance";
 
 import {
   getBytesEncoder,
@@ -41,6 +42,7 @@ export function DepositCollateralCard() {
   } = useDeposit();
   const { wallet } = useWalletConnection();
   const userTokenAccount = useTokenAccount(USDC_MINT_ADDRESS);
+  const { balance: walletBalance } = useTokenBalance(userTokenAccount);
   const [amount, setAmount] = useState("");
   const [txSuccess, setTxSuccess] = useState(false);
   const [vaultAddress, setVaultAddress] = useState<Address | null>(null);
@@ -65,6 +67,13 @@ export function DepositCollateralCard() {
     }
     deriveVault();
   }, []);
+
+  /** Sets the input to the user's full wallet USDC balance. */
+  const handleMax = () => {
+    if (walletBalance === null) return;
+    const maxAmount = Number(walletBalance) / 10 ** USDC_DECIMALS;
+    setAmount(maxAmount.toString());
+  };
 
   const handleDeposit = async () => {
     if (
@@ -162,23 +171,47 @@ export function DepositCollateralCard() {
       {/* Deposit Form */}
       <div className="rounded-xl border border-border-low bg-card p-4 space-y-4">
         <div>
-          <label
-            htmlFor="amount"
-            className="text-xs uppercase tracking-wide text-muted block mb-2"
-          >
-            Deposit Amount (USDC)
-          </label>
-          <input
-            id="amount"
-            type="number"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="0.00"
-            step="0.01"
-            min="0"
-            disabled={isDepositing}
-            className="w-full rounded-lg border border-border-low bg-cream/30 px-4 py-3 text-lg font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-foreground/20 disabled:opacity-50"
-          />
+          <div className="flex items-center justify-between mb-2">
+            <label
+              htmlFor="amount"
+              className="text-xs uppercase tracking-wide text-muted"
+            >
+              Deposit Amount (USDC)
+            </label>
+            <span className="text-xs text-muted">
+              Wallet:{" "}
+              <span className="font-medium text-foreground">
+                {walletBalance !== null
+                  ? formatAmount(walletBalance, USDC_DECIMALS)
+                  : "—"}{" "}
+                USDC
+              </span>
+            </span>
+          </div>
+          <div className="relative">
+            <input
+              id="amount"
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="0.00"
+              step="0.01"
+              min="0"
+              disabled={isDepositing}
+              className="w-full rounded-lg border border-border-low bg-cream/30 px-4 py-3 pr-24 text-lg font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-foreground/20 disabled:opacity-50"
+            />
+            <div className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1.5">
+              <button
+                type="button"
+                onClick={handleMax}
+                disabled={isDepositing || walletBalance === null}
+                className="rounded-md bg-foreground/10 px-2 py-0.5 text-xs font-semibold text-foreground transition hover:bg-foreground/20 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                MAX
+              </button>
+              <span className="text-sm font-medium text-muted">USDC</span>
+            </div>
+          </div>
         </div>
 
         <button

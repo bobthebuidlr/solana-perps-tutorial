@@ -1,11 +1,12 @@
 "use client";
 
-import { useWalletConnection } from "@solana/react-hooks";
 import { type Address } from "@solana/kit";
+import { useWalletConnection } from "@solana/react-hooks";
 import { type Position } from "../generated/perps/accounts/position";
 import { type PerpsMarket } from "../generated/perps/types/perpsMarket";
 import { PositionDirection } from "../generated/perps/types/positionDirection";
 import { useMarkets } from "../hooks/useMarkets";
+import { useOraclePrices } from "../hooks/useOraclePrices";
 import { usePositionPnl } from "../hooks/usePositionPnl";
 import { usePositions } from "../hooks/usePositions";
 
@@ -18,7 +19,10 @@ const USDC_DECIMALS = 6;
  */
 function formatUsdc(amount: bigint): string {
   const n = Number(amount) / 10 ** USDC_DECIMALS;
-  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return n.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 /**
@@ -104,6 +108,7 @@ export function PositionsTable() {
   const { wallet } = useWalletConnection();
   const { positions, isLoading, error, refresh } = usePositions();
   const { markets } = useMarkets();
+  const { prices: oraclePrices } = useOraclePrices();
 
   /**
    * Looks up a PerpsMarket by its token mint address.
@@ -112,6 +117,18 @@ export function PositionsTable() {
    */
   function lookupMarket(perpsMarket: string): PerpsMarket | undefined {
     return markets?.find((m) => m.tokenMint.toString() === perpsMarket);
+  }
+
+  /**
+   * Looks up the current oracle price for a token mint address.
+   * @param tokenMint - Token mint address to look up.
+   * @returns Current oracle price in base units (u64), or null if not found.
+   */
+  function lookupCurrentPrice(tokenMint: string): bigint | null {
+    return (
+      oraclePrices?.find((p) => p.tokenMint.toString() === tokenMint)?.price ??
+      null
+    );
   }
 
   // ── States ──────────────────────────────────────────────────────────────────
@@ -147,7 +164,10 @@ export function PositionsTable() {
       {isLoading && (
         <div className="space-y-2 p-6">
           {[...Array(2)].map((_, i) => (
-            <div key={i} className="h-14 animate-pulse rounded-xl bg-cream/50" />
+            <div
+              key={i}
+              className="h-14 animate-pulse rounded-xl bg-cream/50"
+            />
           ))}
         </div>
       )}
@@ -184,6 +204,7 @@ export function PositionsTable() {
                   { label: "Market", align: "left" },
                   { label: "Size", align: "right" },
                   { label: "Entry Price", align: "right" },
+                  { label: "Mark Price", align: "right" },
                   { label: "Price PnL", align: "right" },
                   { label: "Funding", align: "right" },
                   { label: "Collateral", align: "right" },
@@ -207,6 +228,9 @@ export function PositionsTable() {
                   key={i}
                   position={position}
                   market={lookupMarket(position.perpsMarket.toString())}
+                  currentPrice={lookupCurrentPrice(
+                    position.perpsMarket.toString()
+                  )}
                 />
               ))}
             </tbody>
@@ -221,19 +245,23 @@ export function PositionsTable() {
  * Single row in the positions table.
  * @param position - Decoded Position account data.
  * @param market - Matching PerpsMarket for name/icon lookup, or undefined.
+ * @param currentPrice - Current oracle price in base units (u64), or null.
  */
 function PositionRow({
   position,
   market,
+  currentPrice,
 }: {
   position: Position;
   market: PerpsMarket | undefined;
+  currentPrice: bigint | null;
 }) {
   const { pnl, isLoading: isPnlLoading } = usePositionPnl(
     position.perpsMarket as Address
   );
   const isLong = position.direction === PositionDirection.Long;
-  const name = market?.name ?? `${position.perpsMarket.toString().slice(0, 6)}…`;
+  const name =
+    market?.name ?? `${position.perpsMarket.toString().slice(0, 6)}…`;
   const symbol = market ? getSymbol(market.name) : "?";
   const colorClass = market
     ? iconColorClass(market.name)
@@ -266,7 +294,9 @@ function PositionRow({
 
       {/* Size */}
       <td className="py-3.5 px-4 text-right">
-        <p className="font-mono tabular-nums">{formatUsdc(position.positionSize)}</p>
+        <p className="font-mono tabular-nums">
+          {formatUsdc(position.positionSize)}
+        </p>
         <p className="text-xs text-muted">USDC</p>
       </td>
 
@@ -275,12 +305,33 @@ function PositionRow({
         {formatPrice(position.entryPrice)}
       </td>
 
+      {/* Current oracle (mark) price — shown alongside entry for comparison */}
+      <td className="py-3.5 px-4 text-right font-mono tabular-nums">
+        {currentPrice !== null ? (
+          <span
+            className={
+              currentPrice > position.entryPrice
+                ? "text-green-600"
+                : currentPrice < position.entryPrice
+                  ? "text-red-500"
+                  : ""
+            }
+          >
+            {formatPrice(currentPrice)}
+          </span>
+        ) : (
+          <span className="text-muted">—</span>
+        )}
+      </td>
+
       {/* Price PnL — profit/loss from price movement */}
       <td className="py-3.5 px-4 text-right font-mono tabular-nums">
         {isPnlLoading ? (
           <span className="inline-block h-4 w-14 animate-pulse rounded bg-cream/50" />
         ) : pnl ? (
-          <span className={pnlColorClass(pnl.price)}>{formatPnl(pnl.price)}</span>
+          <span className={pnlColorClass(pnl.price)}>
+            {formatPnl(pnl.price)}
+          </span>
         ) : (
           <span className="text-muted">—</span>
         )}
@@ -291,7 +342,9 @@ function PositionRow({
         {isPnlLoading ? (
           <span className="inline-block h-4 w-14 animate-pulse rounded bg-cream/50" />
         ) : pnl ? (
-          <span className={pnlColorClass(pnl.funding)}>{formatPnl(pnl.funding)}</span>
+          <span className={pnlColorClass(pnl.funding)}>
+            {formatPnl(pnl.funding)}
+          </span>
         ) : (
           <span className="text-muted">—</span>
         )}
@@ -299,7 +352,9 @@ function PositionRow({
 
       {/* Collateral */}
       <td className="py-3.5 px-4 text-right">
-        <p className="font-mono tabular-nums">{formatUsdc(position.collateral)}</p>
+        <p className="font-mono tabular-nums">
+          {formatUsdc(position.collateral)}
+        </p>
         <p className="text-xs text-muted">USDC</p>
       </td>
 

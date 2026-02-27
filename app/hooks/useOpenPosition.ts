@@ -120,7 +120,10 @@ export function useOpenPosition() {
           }),
         };
 
-        const signature = await send({ instructions: [instruction] });
+        const signature = await send(
+          { instructions: [instruction] },
+          { skipPreflight: true },
+        );
         console.log("✅ Position opened:", signature);
         return signature;
       } catch (err) {

@@ -10,6 +10,7 @@ import { useDeposit } from "../hooks/useDeposit";
 import { useMarkets } from "../hooks/useMarkets";
 import { useOpenPosition } from "../hooks/useOpenPosition";
 import { useTokenAccount } from "../hooks/useTokenAccount";
+import { useTokenBalance } from "../hooks/useTokenBalance";
 
 const USDC_DECIMALS = 6;
 const USDC_MINT_ADDRESS =
@@ -608,6 +609,7 @@ function DepositDialog({
 }) {
   const { deposit, isLoading, error } = useDeposit();
   const userTokenAccount = useTokenAccount(USDC_MINT_ADDRESS);
+  const { balance: walletBalance } = useTokenBalance(userTokenAccount);
   const [amount, setAmount] = useState("");
 
   /**
@@ -618,6 +620,13 @@ function DepositDialog({
     const amountLamports = Math.floor(parseFloat(amount) * 10 ** USDC_DECIMALS);
     const sig = await deposit(amountLamports, userTokenAccount);
     if (sig) onSuccess();
+  };
+
+  /** Sets the input to the user's full wallet balance. */
+  const handleMax = () => {
+    if (walletBalance === null) return;
+    const maxAmount = Number(walletBalance) / 10 ** USDC_DECIMALS;
+    setAmount(maxAmount.toString());
   };
 
   return (
@@ -645,9 +654,17 @@ function DepositDialog({
         </p>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-medium uppercase tracking-wide text-muted">
-            Amount (USDC)
-          </label>
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-medium uppercase tracking-wide text-muted">
+              Amount (USDC)
+            </label>
+            <span className="text-xs text-muted">
+              Balance:{" "}
+              <span className="font-medium text-foreground">
+                {walletBalance !== null ? formatUsdc(walletBalance) : "—"} USDC
+              </span>
+            </span>
+          </div>
           <div className="relative">
             <input
               type="number"
@@ -657,13 +674,19 @@ function DepositDialog({
               step="0.01"
               min="0"
               disabled={isLoading}
-              // eslint-disable-next-line jsx-a11y/no-autofocus
-              autoFocus
-              className="w-full rounded-xl border border-border-low bg-cream/30 px-4 py-3 pr-16 text-lg font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-foreground/20 disabled:opacity-50"
+              className="w-full rounded-xl border border-border-low bg-cream/30 px-4 py-3 pr-24 text-lg font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-foreground/20 disabled:opacity-50"
             />
-            <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">
-              
-            </span>
+            <div className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1.5">
+              <button
+                type="button"
+                onClick={handleMax}
+                disabled={isLoading || walletBalance === null}
+                className="rounded-md bg-foreground/10 px-2 py-0.5 text-xs font-semibold text-foreground transition hover:bg-foreground/20 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                MAX
+              </button>
+              <span className="text-sm font-medium text-muted">USDC</span>
+            </div>
           </div>
         </div>
 

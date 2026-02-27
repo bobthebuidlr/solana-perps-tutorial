@@ -15,7 +15,8 @@ import { useSolanaClient, useWalletConnection } from "@solana/react-hooks";
 import { useCallback, useEffect, useState } from "react";
 import { getViewPositionPnlInstruction } from "../generated/perps/instructions/viewPositionPnl";
 import { PERPS_PROGRAM_ADDRESS } from "../generated/perps/programs/perps";
-import { getPnlInfoDecoder, type PnlInfo } from "../generated/perps/types/pnlInfo";
+import { type PnlInfo } from "../generated/perps/types/pnlInfo";
+import { getPositionInfoDecoder } from "../generated/perps/types/positionInfo";
 
 /**
  * Fetches the PnL breakdown for a single position by simulating the
@@ -134,9 +135,10 @@ export function usePositionPnl(tokenMint: Address | null) {
           .map((c) => c.charCodeAt(0))
       );
 
-      // getPnlInfoDecoder().read(bytes, offset) → [PnlInfo, newOffset]
-      const [pnlInfo] = getPnlInfoDecoder().read(bytes, 0);
-      setPnl(pnlInfo);
+      // The program returns the full PositionInfo struct (size + direction +
+      // entryPrice + pnlInfo). Decode from offset 0 and extract pnlInfo.
+      const [positionInfo] = getPositionInfoDecoder().read(bytes, 0);
+      setPnl(positionInfo.pnlInfo);
     } catch (err) {
       console.error("usePositionPnl error:", err);
       setError(

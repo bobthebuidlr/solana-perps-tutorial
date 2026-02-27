@@ -88,9 +88,10 @@ export function useDeposit() {
           console.log(`  [${idx}] ${names[idx]}: ${acc.address} (role: ${acc.role})`);
         });
 
-        const signature = await send({
-          instructions: [instruction],
-        });
+        const signature = await send(
+          { instructions: [instruction] },
+          { skipPreflight: true },
+        );
 
         console.log("✅ Deposit successful! Signature:", signature);
         return signature;
