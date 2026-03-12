@@ -17,8 +17,6 @@ import {
   fixEncoderSize,
   getAddressDecoder,
   getAddressEncoder,
-  getArrayDecoder,
-  getArrayEncoder,
   getBytesDecoder,
   getBytesEncoder,
   getStructDecoder,
@@ -30,12 +28,12 @@ import {
   transformEncoder,
   type Account,
   type Address,
-  type Codec,
-  type Decoder,
   type EncodedAccount,
-  type Encoder,
   type FetchAccountConfig,
   type FetchAccountsConfig,
+  type FixedSizeCodec,
+  type FixedSizeDecoder,
+  type FixedSizeEncoder,
   type MaybeAccount,
   type MaybeEncodedAccount,
   type ReadonlyUint8Array,
@@ -59,7 +57,6 @@ export type UserAccount = {
   market: Address;
   collateral: bigint;
   lockedCollateral: bigint;
-  positions: Array<Address>;
   bump: number;
 };
 
@@ -70,12 +67,11 @@ export type UserAccountArgs = {
   market: Address;
   collateral: number | bigint;
   lockedCollateral: number | bigint;
-  positions: Array<Address>;
   bump: number;
 };
 
 /** Gets the encoder for {@link UserAccountArgs} account data. */
-export function getUserAccountEncoder(): Encoder<UserAccountArgs> {
+export function getUserAccountEncoder(): FixedSizeEncoder<UserAccountArgs> {
   return transformEncoder(
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
@@ -83,7 +79,6 @@ export function getUserAccountEncoder(): Encoder<UserAccountArgs> {
       ["market", getAddressEncoder()],
       ["collateral", getU64Encoder()],
       ["lockedCollateral", getU64Encoder()],
-      ["positions", getArrayEncoder(getAddressEncoder())],
       ["bump", getU8Encoder()],
     ]),
     (value) => ({ ...value, discriminator: USER_ACCOUNT_DISCRIMINATOR }),
@@ -91,20 +86,22 @@ export function getUserAccountEncoder(): Encoder<UserAccountArgs> {
 }
 
 /** Gets the decoder for {@link UserAccount} account data. */
-export function getUserAccountDecoder(): Decoder<UserAccount> {
+export function getUserAccountDecoder(): FixedSizeDecoder<UserAccount> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
     ["authority", getAddressDecoder()],
     ["market", getAddressDecoder()],
     ["collateral", getU64Decoder()],
     ["lockedCollateral", getU64Decoder()],
-    ["positions", getArrayDecoder(getAddressDecoder())],
     ["bump", getU8Decoder()],
   ]);
 }
 
 /** Gets the codec for {@link UserAccount} account data. */
-export function getUserAccountCodec(): Codec<UserAccountArgs, UserAccount> {
+export function getUserAccountCodec(): FixedSizeCodec<
+  UserAccountArgs,
+  UserAccount
+> {
   return combineCodec(getUserAccountEncoder(), getUserAccountDecoder());
 }
 
@@ -159,4 +156,8 @@ export async function fetchAllMaybeUserAccount(
 ): Promise<MaybeAccount<UserAccount>[]> {
   const maybeAccounts = await fetchEncodedAccounts(rpc, addresses, config);
   return maybeAccounts.map((maybeAccount) => decodeUserAccount(maybeAccount));
+}
+
+export function getUserAccountSize(): number {
+  return 89;
 }

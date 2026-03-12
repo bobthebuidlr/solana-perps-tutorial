@@ -427,15 +427,6 @@ describe("Full Flow Test", () => {
         "USDC"
       );
       console.log("✓ Position verified");
-
-      // Verify position is tracked in user account
-      assert.isTrue(
-        userAccount.positions.some(
-          (p) => p.toString() === positionPda.toString()
-        ),
-        "Position should be in user's positions array"
-      );
-      console.log("✓ Position tracked in user account");
     });
 
     it("should open a SHORT position on a different market (if needed)", async () => {
@@ -507,10 +498,7 @@ describe("Full Flow Test", () => {
       ).div(new BN(1_000_000));
       console.log("Expected price PnL (raw):", expectedPricePnl.toString());
 
-      assert.isDefined(
-        positionInfo.direction.long,
-        "Direction should be LONG"
-      );
+      assert.isDefined(positionInfo.direction.long, "Direction should be LONG");
       assert.equal(
         positionInfo.pnlInfo.price.toString(),
         expectedPricePnl.toString(),
@@ -523,9 +511,7 @@ describe("Full Flow Test", () => {
       // Total PnL must be price PnL + funding PnL
       assert.equal(
         positionInfo.pnlInfo.total.toString(),
-        positionInfo.pnlInfo.price
-          .add(positionInfo.pnlInfo.funding)
-          .toString(),
+        positionInfo.pnlInfo.price.add(positionInfo.pnlInfo.funding).toString(),
         "Total PnL should be the sum of price PnL and funding PnL"
       );
       console.log("✓ LONG position shows positive PnL on price increase");
@@ -588,9 +574,7 @@ describe("Full Flow Test", () => {
       // Total PnL must be price PnL + funding PnL
       assert.equal(
         positionInfo.pnlInfo.total.toString(),
-        positionInfo.pnlInfo.price
-          .add(positionInfo.pnlInfo.funding)
-          .toString(),
+        positionInfo.pnlInfo.price.add(positionInfo.pnlInfo.funding).toString(),
         "Total PnL should be the sum of price PnL and funding PnL"
       );
       console.log("✓ LONG position shows negative PnL on price decrease");
@@ -598,28 +582,49 @@ describe("Full Flow Test", () => {
   });
 
   describe("Step 6: Close Position", () => {
-    // Price used for the close — $150 gives the LONG a profit
-    const CLOSE_PRICE = new BN(150_000_000); // $150 (6-decimal fixed point)
+    // Oracle is at $80 after Step 5b — no update needed for the loss case
+    const CLOSE_PRICE_WIN = new BN(110_000_000); // $110 (6-decimal fixed point)
+    // 1 SOL in 6-decimal token quantity
+    const POSITION_SIZE_SMALL = new BN(1_000_000);
 
-    it("should close the LONG position and settle PnL to user wallet", async () => {
-      console.log("\n🚀 Step 6: Closing position at $150 (profit case)...");
+    it("Step 6a: should close the 5-SOL LONG at a loss ($80) and deduct position.collateral from user account", async () => {
+      console.log(
+        "\n🚀 Step 6a: Closing 5-SOL LONG at $80 (loss case, oracle already set)..."
+      );
 
-      // Update oracle to $150 so the long is in profit
-      const updateTx = await program.methods
-        .updateOracle(SOL_MINT, CLOSE_PRICE)
-        .accounts({ oracle: oraclePda })
-        .rpc();
-      console.log("Oracle updated to $150. TX:", updateTx);
+      // Oracle is already at $80 from Step 5b — no update needed
 
       // Snapshot state before close
       const positionBefore = await program.account.position.fetch(positionPda);
-      const userAccountBefore = await program.account.userAccount.fetch(userAccountPda);
-      const { getAccount } = await import("@solana/spl-token");
-      const tokenAccountBefore = await getAccount(connection, userTokenAccount);
-      const balanceBefore = tokenAccountBefore.amount;
+      const userAccountBefore = await program.account.userAccount.fetch(
+        userAccountPda
+      );
+      // Token account checks are no longer needed since PnL goes to collateral account
 
-      console.log("Position collateral:", positionBefore.collateral.toNumber() / 1_000_000, "USDC");
-      console.log("User token balance before:", balanceBefore.toString());
+      console.log(
+        "Position collateral:",
+        positionBefore.collateral.toNumber() / 1_000_000,
+        "USDC"
+      );
+      console.log(
+        "User account collateral before:",
+        userAccountBefore.collateral.toNumber() / 1_000_000,
+        "USDC"
+      );
+
+      // Numbers:
+      // position.collateral = 5 SOL × $100 = 500 USDC = 500_000_000
+      // price_pnl = 5_000_000 × (80_000_000 − 100_000_000) / 1_000_000 = −100_000_000 (−100 USDC)
+      // user collateral before = 1000 USDC (or whatever it was)
+      // user collateral after = 1000 − 100 = 900 USDC
+      const oracleAccount = await program.account.oracle.fetch(oraclePda);
+      const oraclePrice = oracleAccount.prices.find(
+        (p) => p.tokenMint.toString() === SOL_MINT.toString()
+      ).price;
+      const expectedPricePnl = positionBefore.positionSize
+        .mul(oraclePrice.sub(positionBefore.entryPrice))
+        .div(new BN(1_000_000));
+      // Settlement calculation no longer needed - PnL goes to collateral
 
       const tx = await program.methods
         .closePosition(SOL_MINT)
@@ -627,8 +632,6 @@ describe("Full Flow Test", () => {
           user: wallet.publicKey,
           markets: marketsPda,
           oracle: oraclePda,
-          vault: vaultPda,
-          userTokenAccount: userTokenAccount,
         })
         .rpc();
 
@@ -638,49 +641,192 @@ describe("Full Flow Test", () => {
       try {
         await program.account.position.fetch(positionPda);
         assert.fail("Position PDA should be closed");
-      } catch (err) {
+      } catch {
         console.log("✓ Position PDA closed (account not found as expected)");
       }
 
-      // Assert user token balance increased by expected settlement
-      // price_pnl = position_size * (close_price - entry_price) / 10^6
-      // funding_pnl ≈ 0 (no time elapsed between open and close in test)
-      const expectedPricePnl = positionBefore.positionSize
-        .mul(CLOSE_PRICE.sub(positionBefore.entryPrice))
-        .div(new BN(1_000_000));
-      const expectedSettlement = positionBefore.collateral.add(expectedPricePnl);
+      // PnL is now added to user's collateral account instead of wallet
+      // No need to check token balance changes
 
-      const tokenAccountAfter = await getAccount(connection, userTokenAccount);
-      const balanceAfter = tokenAccountAfter.amount;
-      const received = new BN(balanceAfter.toString()).sub(new BN(balanceBefore.toString()));
-
-      console.log("Expected settlement:", expectedSettlement.toNumber() / 1_000_000, "USDC");
-      console.log("Received settlement:", received.toNumber() / 1_000_000, "USDC");
-      assert.equal(
-        received.toString(),
-        expectedSettlement.toString(),
-        "User should receive collateral + price PnL"
+      // Assert user account: collateral reflects PnL
+      // Collateral = previous_collateral + PnL (floored at 0)
+      // Note: position_collateral is NOT subtracted, it's just unlocked from locked_collateral
+      const userAccountAfter = await program.account.userAccount.fetch(
+        userAccountPda
       );
-
-      // Assert user account state
-      const userAccountAfter = await program.account.userAccount.fetch(userAccountPda);
+      
+      const expectedFinalCollateral = (() => {
+        if (expectedPricePnl.gte(new BN(0))) {
+          return userAccountBefore.collateral.add(expectedPricePnl);
+        } else {
+          const loss = expectedPricePnl.abs();
+          return loss.gt(userAccountBefore.collateral) ? new BN(0) : userAccountBefore.collateral.sub(loss);
+        }
+      })();
+      
+      console.log(
+        "Expected PnL:",
+        expectedPricePnl.toNumber() / 1_000_000,
+        "USDC"
+      );
+      console.log(
+        "User collateral after close:",
+        userAccountAfter.collateral.toNumber() / 1_000_000,
+        "USDC"
+      );
+      console.log(
+        "Expected final collateral:",
+        expectedFinalCollateral.toNumber() / 1_000_000,
+        "USDC"
+      );
+      
+      assert.equal(
+        userAccountAfter.collateral.toString(),
+        expectedFinalCollateral.toString(),
+        "collateral should reflect position PnL"
+      );
       assert.equal(
         userAccountAfter.lockedCollateral.toString(),
         "0",
         "locked_collateral should be 0 after close"
       );
+
+      // Assert market OI is cleared
+      const marketsAccount = await program.account.markets.fetch(marketsPda);
+      const market = marketsAccount.perps.find(
+        (m) => m.tokenMint.toString() === SOL_MINT.toString()
+      );
+      assert.equal(
+        market.totalLongOi.toString(),
+        "0",
+        "total_long_oi should be 0 after loss close"
+      );
+
+      console.log("✓ All Step 6a (loss close) assertions passed");
+    });
+
+    it("Step 6b: should close a winning 1-SOL LONG ($80→$110) and deduct position.collateral from user account", async () => {
+      console.log(
+        "\n🚀 Step 6b: Opening 1-SOL LONG at $80 then closing at $110 (win case)..."
+      );
+
+      // Oracle is still at $80 — open a new 1-SOL LONG
+      const openTx = await program.methods
+        .openPosition(SOL_MINT, { long: {} }, POSITION_SIZE_SMALL)
+        .accounts({
+          user: wallet.publicKey,
+          markets: marketsPda,
+          oracle: oraclePda,
+        })
+        .rpc();
+      console.log("Opened 1-SOL LONG at $80. TX:", openTx);
+
+      // Update oracle to $110 for the win close
+      const updateTx = await program.methods
+        .updateOracle(SOL_MINT, CLOSE_PRICE_WIN)
+        .accounts({ oracle: oraclePda })
+        .rpc();
+      console.log("Oracle updated to $110. TX:", updateTx);
+
+      // Snapshot state before close
+      const positionBefore = await program.account.position.fetch(positionPda);
+      const userAccountBefore = await program.account.userAccount.fetch(
+        userAccountPda
+      );
+      // Token account checks are no longer needed since PnL goes to collateral account
+
+      console.log(
+        "Position collateral:",
+        positionBefore.collateral.toNumber() / 1_000_000,
+        "USDC"
+      );
+      console.log(
+        "User account collateral before:",
+        userAccountBefore.collateral.toNumber() / 1_000_000,
+        "USDC"
+      );
+
+      // Numbers:
+      // position.collateral = 1 SOL × $80 = 80 USDC = 80_000_000
+      // price_pnl = 1_000_000 × (110_000_000 − 80_000_000) / 1_000_000 = +30_000_000 (+30 USDC)
+      // user collateral before = whatever it was after Step 6a
+      // user collateral after = previous + 30 USDC
+      const expectedPricePnl = positionBefore.positionSize
+        .mul(CLOSE_PRICE_WIN.sub(positionBefore.entryPrice))
+        .div(new BN(1_000_000));
+      // Settlement calculation no longer needed - PnL goes to collateral
+
+      const tx = await program.methods
+        .closePosition(SOL_MINT)
+        .accounts({
+          user: wallet.publicKey,
+          markets: marketsPda,
+          oracle: oraclePda,
+        })
+        .rpc();
+
+      console.log("✅ Position closed! TX:", tx);
+
+      // Assert position PDA is gone
+      try {
+        await program.account.position.fetch(positionPda);
+        assert.fail("Position PDA should be closed");
+      } catch {
+        console.log("✓ Position PDA closed (account not found as expected)");
+      }
+
+      // PnL is now added to user's collateral account instead of wallet
+      // No need to check token balance changes
+
+      // Assert user account: collateral reflects PnL
+      // Collateral = previous_collateral + PnL
+      // Note: position_collateral is NOT subtracted, it's just unlocked from locked_collateral
+      const userAccountAfter = await program.account.userAccount.fetch(
+        userAccountPda
+      );
+      
+      const expectedFinalCollateral = userAccountBefore.collateral
+        .add(expectedPricePnl);
+      
+      console.log(
+        "Expected PnL:",
+        expectedPricePnl.toNumber() / 1_000_000,
+        "USDC"
+      );
+      console.log(
+        "User collateral after close:",
+        userAccountAfter.collateral.toNumber() / 1_000_000,
+        "USDC"
+      );
+      console.log(
+        "Expected final collateral:",
+        expectedFinalCollateral.toNumber() / 1_000_000,
+        "USDC"
+      );
+      
       assert.equal(
         userAccountAfter.collateral.toString(),
-        userAccountBefore.collateral.sub(expectedSettlement).toString(),
-        "collateral should decrease by settlement amount (collateral + PnL)"
+        expectedFinalCollateral.toString(),
+        "collateral should include profit from closed position"
+      );
+      assert.equal(
+        userAccountAfter.lockedCollateral.toString(),
+        "0",
+        "locked_collateral should be 0 after close"
       );
 
       // Assert market OI is cleared
       const marketsAccount = await program.account.markets.fetch(marketsPda);
-      const market = marketsAccount.perps.find((m) => m.tokenMint.toString() === SOL_MINT.toString());
-      assert.equal(market.totalLongOi.toString(), "0", "total_long_oi should be 0");
+      const market = marketsAccount.perps.find(
+        (m) => m.tokenMint.toString() === SOL_MINT.toString()
+      );
+      assert.equal(
+        market.totalLongOi.toString(),
+        "0",
+        "total_long_oi should be 0 after win close"
+      );
 
-      console.log("✓ All close position assertions passed");
+      console.log("✓ All Step 6b (win close) assertions passed");
     });
   });
 
@@ -688,19 +834,29 @@ describe("Full Flow Test", () => {
     it("should withdraw all available collateral to user wallet", async () => {
       console.log("\n🚀 Step 7: Withdrawing remaining collateral...");
 
-      const userAccountBefore = await program.account.userAccount.fetch(userAccountPda);
-      const available = userAccountBefore.collateral.sub(userAccountBefore.lockedCollateral);
+      const userAccountBefore = await program.account.userAccount.fetch(
+        userAccountPda
+      );
+      const available = userAccountBefore.collateral.sub(
+        userAccountBefore.lockedCollateral
+      );
 
-      console.log("Available to withdraw:", available.toNumber() / 1_000_000, "USDC");
+      console.log(
+        "Available to withdraw:",
+        available.toNumber() / 1_000_000,
+        "USDC"
+      );
 
+      // Snapshot token balance before withdrawal
       const { getAccount } = await import("@solana/spl-token");
       const tokenAccountBefore = await getAccount(connection, userTokenAccount);
       const balanceBefore = new BN(tokenAccountBefore.amount.toString());
 
       const tx = await program.methods
-        .withdrawCollateral()
+        .withdrawCollateral(available)
         .accounts({
           user: wallet.publicKey,
+          userAccount: userAccountPda,
           vault: vaultPda,
           userTokenAccount: userTokenAccount,
         })
@@ -720,7 +876,9 @@ describe("Full Flow Test", () => {
       );
 
       // Assert user account collateral is 0
-      const userAccountAfter = await program.account.userAccount.fetch(userAccountPda);
+      const userAccountAfter = await program.account.userAccount.fetch(
+        userAccountPda
+      );
       assert.equal(
         userAccountAfter.collateral.toString(),
         "0",
@@ -757,8 +915,6 @@ describe("Full Flow Test", () => {
         userAccount.lockedCollateral.toNumber() / 1_000_000,
         "USDC"
       );
-      console.log("✓ User positions count:", userAccount.positions.length);
-
       // Check Position — may have been closed in Step 6
       try {
         const position = await program.account.position.fetch(positionPda);

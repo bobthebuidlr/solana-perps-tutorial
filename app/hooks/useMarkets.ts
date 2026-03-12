@@ -1,13 +1,8 @@
-import {
-  getBytesEncoder,
-  getProgramDerivedAddress,
-  type Address,
-} from "@solana/kit";
 import { useSolanaClient } from "@solana/react-hooks";
 import { useCallback, useEffect, useState } from "react";
 import { fetchMarkets } from "../generated/perps";
-import { PERPS_PROGRAM_ADDRESS } from "../generated/perps/programs/perps";
 import { type PerpsMarket } from "../generated/perps/types";
+import { useMarketsPda } from "./usePdas";
 
 /**
  * Custom hook to fetch all available perps markets from the Solana program.
@@ -20,37 +15,10 @@ import { type PerpsMarket } from "../generated/perps/types";
  */
 export function useMarkets() {
   const client = useSolanaClient();
+  const marketsAddress = useMarketsPda();
   const [markets, setMarkets] = useState<PerpsMarket[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const [marketsAddress, setMarketsAddress] = useState<Address | null>(null);
-
-  // Derive Markets PDA once on mount
-  useEffect(() => {
-    async function deriveMarketsAddress() {
-      try {
-        const [pda] = await getProgramDerivedAddress({
-          programAddress: PERPS_PROGRAM_ADDRESS,
-          seeds: [
-            getBytesEncoder().encode(
-              new Uint8Array([109, 97, 114, 107, 101, 116, 115])
-            ), // "markets"
-          ],
-        });
-        console.log("Markets PDA:", pda);
-        console.log("Perps program: ", PERPS_PROGRAM_ADDRESS);
-        setMarketsAddress(pda);
-      } catch (err) {
-        console.error("Failed to derive Markets PDA:", err);
-        setError(
-          err instanceof Error ? err : new Error("Failed to derive Markets PDA")
-        );
-        setIsLoading(false);
-      }
-    }
-
-    deriveMarketsAddress();
-  }, []);
 
   // Fetch markets data
   const fetchMarketsData = useCallback(async () => {

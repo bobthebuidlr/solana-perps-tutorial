@@ -100,9 +100,6 @@ pub fn handler(
         .checked_add(collateral_usdc)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
 
-    // Add position to user's position list
-    user_account.positions.push(position.key());
-
     // Update market open interest in USDC terms
     match direction {
         PositionDirection::Long => {

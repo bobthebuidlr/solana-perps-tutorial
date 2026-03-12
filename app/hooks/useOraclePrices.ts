@@ -1,9 +1,8 @@
-import { getBytesEncoder, getProgramDerivedAddress } from "@solana/kit";
 import { useSolanaClient } from "@solana/react-hooks";
 import { useCallback, useEffect, useState } from "react";
 import { fetchOracle } from "../generated/perps/accounts/oracle";
-import { PERPS_PROGRAM_ADDRESS } from "../generated/perps/programs/perps";
 import { type OraclePrice } from "../generated/perps/types/oraclePrice";
+import { useOraclePda } from "./usePdas";
 
 /**
  * Fetches all current oracle prices from the on-chain Oracle account.
@@ -15,27 +14,20 @@ import { type OraclePrice } from "../generated/perps/types/oraclePrice";
  */
 export function useOraclePrices() {
   const client = useSolanaClient();
+  const oracleAddress = useOraclePda();
   const [prices, setPrices] = useState<OraclePrice[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  const fetchPrices = useCallback(async () => {
-    if (!client?.runtime?.rpc) return;
+  const fetchPrices = useCallback(async (silent = false) => {
+    if (!oracleAddress || !client?.runtime?.rpc) return;
 
-    setIsLoading(true);
+    if (!silent) {
+      setIsLoading(true);
+    }
     setError(null);
 
     try {
-      const [oracleAddress] = await getProgramDerivedAddress({
-        programAddress: PERPS_PROGRAM_ADDRESS,
-        seeds: [
-          getBytesEncoder().encode(
-            // "oracle"
-            new Uint8Array([111, 114, 97, 99, 108, 101])
-          ),
-        ],
-      });
-
       const oracle = await fetchOracle(client.runtime.rpc, oracleAddress);
       setPrices(oracle.data.prices);
     } catch (err) {
@@ -46,13 +38,26 @@ export function useOraclePrices() {
       );
       setPrices(null);
     } finally {
-      setIsLoading(false);
+      if (!silent) {
+        setIsLoading(false);
+      }
     }
-  }, [client]);
+  }, [oracleAddress, client]);
 
   useEffect(() => {
     fetchPrices();
   }, [fetchPrices]);
 
-  return { prices, isLoading, error, refresh: fetchPrices };
+  // Auto-refresh oracle prices every 5 seconds
+  useEffect(() => {
+    if (!oracleAddress) return;
+    
+    const interval = setInterval(() => {
+      fetchPrices(true); // silent refresh
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [oracleAddress, fetchPrices]);
+
+  return { prices, isLoading, error, refresh: () => fetchPrices(false) };
 }

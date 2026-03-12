@@ -62,7 +62,7 @@ pub mod perps {
         close_position::handler(ctx, token_mint)
     }
 
-    pub fn withdraw_collateral(ctx: Context<WithdrawCollateral>) -> Result<()> {
-        withdraw_collateral::handler(ctx)
+    pub fn withdraw_collateral(ctx: Context<WithdrawCollateral>, amount: u64) -> Result<()> {
+        withdraw_collateral::handler(ctx, amount)
     }
 }

@@ -35,14 +35,17 @@ pub struct WithdrawCollateral<'info> {
     pub token_program: Program<'info, Token>,
 }
 
-/// Withdraws all available (unlocked) collateral from the vault to the user's token account.
+/// Withdraws the specified amount of available (unlocked) collateral from the vault to the user's token account.
 /// @param ctx - Accounts context.
+/// @param amount - Amount of USDC (6-decimal) to withdraw.
 /// @returns Ok(()) on success.
-pub fn handler(ctx: Context<WithdrawCollateral>) -> Result<()> {
+pub fn handler(ctx: Context<WithdrawCollateral>, amount: u64) -> Result<()> {
+    require!(amount > 0, ErrorCode::InvalidAmount);
+
     let user_account = &mut ctx.accounts.user_account;
 
     let available = user_account.available_collateral()?;
-    require!(available > 0, ErrorCode::CollateralLocked);
+    require!(available >= amount, ErrorCode::InsufficientCollateral);
 
     // CPI: vault PDA signs the transfer to user_token_account
     let vault_bump = ctx.bumps.vault;
@@ -59,15 +62,15 @@ pub fn handler(ctx: Context<WithdrawCollateral>) -> Result<()> {
         cpi_accounts,
         signer_seeds,
     );
-    token::transfer(cpi_ctx, available)?;
+    token::transfer(cpi_ctx, amount)?;
 
     // Deduct withdrawn amount from user's recorded collateral
     user_account.collateral = user_account
         .collateral
-        .checked_sub(available)
+        .checked_sub(amount)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
 
-    msg!("Withdrew {} USDC (6-decimal) to user", available);
+    msg!("Withdrew {} USDC (6-decimal) to user", amount);
 
     Ok(())
 }

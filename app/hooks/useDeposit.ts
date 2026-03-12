@@ -1,16 +1,11 @@
-import {
-  getBytesEncoder,
-  getProgramDerivedAddress,
-  getAddressEncoder,
-  type Address,
-} from "@solana/kit";
+import { type Address } from "@solana/kit";
 import { useSendTransaction, useWalletConnection } from "@solana/react-hooks";
 import { useCallback, useState } from "react";
 import { PERPS_PROGRAM_ADDRESS } from "../generated/perps";
 import { getDepositCollateralInstructionDataEncoder } from "../generated/perps/instructions/depositCollateral";
-
-const TOKEN_PROGRAM_ADDRESS = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address;
-const SYSTEM_PROGRAM_ADDRESS = "11111111111111111111111111111111" as Address;
+import { SYSTEM_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS } from "../lib/constants";
+import { deriveVaultPda } from "../lib/pdas";
+import { useUserAccountPda } from "./usePdas";
 
 /**
  * Custom hook to deposit collateral into the user's perps account.
@@ -27,10 +22,11 @@ export function useDeposit() {
   const { wallet } = useWalletConnection();
 
   const walletAddress = wallet?.account.address;
+  const userAccountAddress = useUserAccountPda(walletAddress);
 
   const deposit = useCallback(
     async (amount: number, userTokenAccount: Address) => {
-      if (!walletAddress || !wallet) {
+      if (!walletAddress || !wallet || !userAccountAddress) {
         console.error("❌ Deposit Error: No wallet connected");
         return null;
       }
@@ -39,75 +35,41 @@ export function useDeposit() {
       setError(null);
 
       try {
-        // Derive userAccount PDA
-        const [userAccountAddress] = await getProgramDerivedAddress({
-          programAddress: PERPS_PROGRAM_ADDRESS,
-          seeds: [
-            getBytesEncoder().encode(new Uint8Array([117, 115, 101, 114])), // "user"
-            getAddressEncoder().encode(walletAddress),
-          ],
-        });
-
         // Derive vault PDA
-        const [vaultAddress] = await getProgramDerivedAddress({
-          programAddress: PERPS_PROGRAM_ADDRESS,
-          seeds: [
-            getBytesEncoder().encode(new Uint8Array([118, 97, 117, 108, 116])), // "vault"
-          ],
-        });
-
-        console.log("🔍 Deposit Debug Info:", {
-          user: walletAddress,
-          userAccount: userAccountAddress,
-          userTokenAccount,
-          vault: vaultAddress,
-          amount,
-        });
+        const vaultAddress = await deriveVaultPda();
 
         // Manually construct instruction with all 6 required accounts
         // This matches the Rust program's DepositCollateral struct
         const instruction = {
           programAddress: PERPS_PROGRAM_ADDRESS,
           accounts: [
-            { address: walletAddress, role: 3 },         // user (WritableSigner)
-            { address: userAccountAddress, role: 1 },    // userAccount (Writable, PDA with init_if_needed)
-            { address: userTokenAccount, role: 1 },      // userTokenAccount (Writable)
-            { address: vaultAddress, role: 1 },          // vault (Writable)
-            { address: TOKEN_PROGRAM_ADDRESS, role: 0 }, // tokenProgram (Readonly)
-            { address: SYSTEM_PROGRAM_ADDRESS, role: 0 },// systemProgram (Readonly, needed for init_if_needed)
+            { address: walletAddress, role: 3 },              // user (WritableSigner)
+            { address: userAccountAddress, role: 1 },         // userAccount (Writable, PDA with init_if_needed)
+            { address: userTokenAccount, role: 1 },           // userTokenAccount (Writable)
+            { address: vaultAddress, role: 1 },               // vault (Writable)
+            { address: TOKEN_PROGRAM_ADDRESS, role: 0 },      // tokenProgram (Readonly)
+            { address: SYSTEM_PROGRAM_ADDRESS, role: 0 },     // systemProgram (Readonly, needed for init_if_needed)
           ],
           data: getDepositCollateralInstructionDataEncoder().encode({
             amount: BigInt(Math.floor(amount)),
           }),
         };
 
-        console.log("📋 Instruction has", instruction.accounts.length, "accounts");
-        console.log("📋 Account details:");
-        instruction.accounts.forEach((acc, idx) => {
-          const names = ["user", "userAccount", "userTokenAccount", "vault", "tokenProgram", "systemProgram"];
-          console.log(`  [${idx}] ${names[idx]}: ${acc.address} (role: ${acc.role})`);
-        });
-
         const signature = await send(
           { instructions: [instruction] },
           { skipPreflight: true },
         );
 
-        console.log("✅ Deposit successful! Signature:", signature);
         return signature;
       } catch (err) {
         console.error("❌ Deposit failed with error:", err);
-        if (err instanceof Error) {
-          console.error("Error message:", err.message);
-          console.error("Error stack:", err.stack);
-        }
         setError(err instanceof Error ? err : new Error("Deposit failed"));
         return null;
       } finally {
         setIsLoading(false);
       }
     },
-    [send, walletAddress, wallet]
+    [send, walletAddress, wallet, userAccountAddress]
   );
 
   return {

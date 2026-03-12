@@ -5,26 +5,13 @@ import { useWalletConnection } from "@solana/react-hooks";
 import { type Position } from "../generated/perps/accounts/position";
 import { type PerpsMarket } from "../generated/perps/types/perpsMarket";
 import { PositionDirection } from "../generated/perps/types/positionDirection";
+import { useClosePosition } from "../hooks/useClosePosition";
 import { useMarkets } from "../hooks/useMarkets";
 import { useOraclePrices } from "../hooks/useOraclePrices";
 import { usePositionPnl } from "../hooks/usePositionPnl";
 import { usePositions } from "../hooks/usePositions";
-
-const USDC_DECIMALS = 6;
-const TOKEN_DECIMALS = 6; // position_size stored with 6-decimal precision
-
-/**
- * Formats a raw u64 USDC amount into a two-decimal display string.
- * @param amount - Base units (10^6 = 1 USDC).
- * @returns e.g. "500.00"
- */
-function formatUsdc(amount: bigint): string {
-  const n = Number(amount) / 10 ** USDC_DECIMALS;
-  return n.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
+import { USDC_DECIMALS, TOKEN_DECIMALS } from "../lib/constants";
+import { formatUsdc, getSymbol, iconColorClass } from "../lib/format";
 
 /**
  * Formats a raw u64 token quantity (6-decimal precision) into a display string.
@@ -83,33 +70,6 @@ function formatAge(openedAt: bigint): string {
   if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
   if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
   return `${Math.floor(secs / 86400)}d ago`;
-}
-
-/**
- * Extracts the base ticker from a market name (e.g. "SOL-PERP" → "SOL").
- * @param name - Raw market name string.
- * @returns Uppercase ticker, max 4 chars.
- */
-function getSymbol(name: string): string {
-  return (name.split("-")[0] ?? name).slice(0, 4).toUpperCase();
-}
-
-/**
- * Returns a deterministic Tailwind color pair for a market icon avatar.
- * @param name - Market name used to hash into the palette.
- * @returns Tailwind class string for background and text color.
- */
-function iconColorClass(name: string): string {
-  const palette = [
-    "bg-blue-500/15 text-blue-500",
-    "bg-violet-500/15 text-violet-500",
-    "bg-emerald-500/15 text-emerald-500",
-    "bg-orange-500/15 text-orange-500",
-    "bg-pink-500/15 text-pink-500",
-    "bg-cyan-500/15 text-cyan-500",
-  ];
-  const hash = [...name].reduce((a, c) => a + c.charCodeAt(0), 0);
-  return palette[hash % palette.length]!;
 }
 
 /**
@@ -245,6 +205,7 @@ export function PositionsTable() {
                   currentPrice={lookupCurrentPrice(
                     position.perpsMarket.toString()
                   )}
+                  onClose={refresh}
                 />
               ))}
             </tbody>
@@ -260,16 +221,20 @@ export function PositionsTable() {
  * @param position - Decoded Position account data.
  * @param market - Matching PerpsMarket for name/icon lookup, or undefined.
  * @param currentPrice - Current oracle price in base units (u64), or null.
+ * @param onClose - Callback invoked after a successful close to trigger a refresh.
  */
 function PositionRow({
   position,
   market,
   currentPrice,
+  onClose,
 }: {
   position: Position;
   market: PerpsMarket | undefined;
   currentPrice: bigint | null;
+  onClose: () => void;
 }) {
+  const { closePosition, isLoading: isClosing } = useClosePosition();
   const { pnl, isLoading: isPnlLoading } = usePositionPnl(
     position.perpsMarket as Address
   );
@@ -377,14 +342,18 @@ function PositionRow({
         {formatAge(position.openedAt)}
       </td>
 
-      {/* Close — placeholder until closePosition instruction is added */}
+      {/* Close position */}
       <td className="py-3.5 pl-4 pr-6 text-right">
         <button
-          disabled
-          title="Close position — coming soon"
-          className="rounded-lg border border-border-low bg-card px-3 py-1.5 text-xs font-medium text-muted opacity-50 cursor-not-allowed"
+          onClick={() =>
+            closePosition(position.perpsMarket as Address).then((sig) => {
+              if (sig) onClose();
+            })
+          }
+          disabled={isClosing}
+          className="rounded-lg border border-border-low bg-card px-3 py-1.5 text-xs font-medium text-muted transition hover:-translate-y-0.5 hover:text-foreground hover:shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Close
+          {isClosing ? "Closing…" : "Close"}
         </button>
       </td>
     </tr>

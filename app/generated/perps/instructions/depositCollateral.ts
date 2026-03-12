@@ -134,7 +134,7 @@ export type DepositCollateralAsyncInput<
   user: TransactionSigner<TAccountUser>;
   userAccount?: Address<TAccountUserAccount>;
   userTokenAccount: Address<TAccountUserTokenAccount>;
-  vault: Address<TAccountVault>;
+  vault?: Address<TAccountVault>;
   tokenProgram?: Address<TAccountTokenProgram>;
   systemProgram?: Address<TAccountSystemProgram>;
   amount: DepositCollateralInstructionDataArgs["amount"];
@@ -199,6 +199,14 @@ export async function getDepositCollateralInstructionAsync<
       seeds: [
         getBytesEncoder().encode(new Uint8Array([117, 115, 101, 114])),
         getAddressEncoder().encode(expectAddress(accounts.user.value)),
+      ],
+    });
+  }
+  if (!accounts.vault.value) {
+    accounts.vault.value = await getProgramDerivedAddress({
+      programAddress,
+      seeds: [
+        getBytesEncoder().encode(new Uint8Array([118, 97, 117, 108, 116])),
       ],
     });
   }

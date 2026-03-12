@@ -2,10 +2,7 @@ import {
   appendTransactionMessageInstruction,
   compileTransaction,
   createTransactionMessage,
-  getAddressEncoder,
   getBase64EncodedWireTransaction,
-  getBytesEncoder,
-  getProgramDerivedAddress,
   pipe,
   setTransactionMessageFeePayer,
   setTransactionMessageLifetimeUsingBlockhash,
@@ -14,9 +11,10 @@ import {
 import { useSolanaClient, useWalletConnection } from "@solana/react-hooks";
 import { useCallback, useEffect, useState } from "react";
 import { getViewPositionPnlInstruction } from "../generated/perps/instructions/viewPositionPnl";
-import { PERPS_PROGRAM_ADDRESS } from "../generated/perps/programs/perps";
 import { type PnlInfo } from "../generated/perps/types/pnlInfo";
 import { getPositionInfoDecoder } from "../generated/perps/types/positionInfo";
+import { derivePositionPda } from "../lib/pdas";
+import { useMarketsPda, useOraclePda } from "./usePdas";
 
 /**
  * Fetches the PnL breakdown for a single position by simulating the
@@ -32,6 +30,8 @@ import { getPositionInfoDecoder } from "../generated/perps/types/positionInfo";
 export function usePositionPnl(tokenMint: Address | null) {
   const client = useSolanaClient();
   const { wallet } = useWalletConnection();
+  const marketsAddress = useMarketsPda();
+  const oracleAddress = useOraclePda();
   const [pnl, setPnl] = useState<PnlInfo | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -39,7 +39,7 @@ export function usePositionPnl(tokenMint: Address | null) {
   const walletAddress = wallet?.account.address;
 
   const fetchPnl = useCallback(async () => {
-    if (!walletAddress || !tokenMint || !client?.runtime?.rpc) {
+    if (!walletAddress || !tokenMint || !client?.runtime?.rpc || !marketsAddress || !oracleAddress) {
       setPnl(null);
       return;
     }
@@ -49,36 +49,7 @@ export function usePositionPnl(tokenMint: Address | null) {
 
     try {
       // Derive position PDA (unique per user + market token mint)
-      const [positionAddress] = await getProgramDerivedAddress({
-        programAddress: PERPS_PROGRAM_ADDRESS,
-        seeds: [
-          getBytesEncoder().encode(
-            new Uint8Array([112, 111, 115, 105, 116, 105, 111, 110]) // "position"
-          ),
-          getAddressEncoder().encode(walletAddress),
-          getAddressEncoder().encode(tokenMint),
-        ],
-      });
-
-      // Derive markets PDA
-      const [marketsAddress] = await getProgramDerivedAddress({
-        programAddress: PERPS_PROGRAM_ADDRESS,
-        seeds: [
-          getBytesEncoder().encode(
-            new Uint8Array([109, 97, 114, 107, 101, 116, 115]) // "markets"
-          ),
-        ],
-      });
-
-      // Derive oracle PDA
-      const [oracleAddress] = await getProgramDerivedAddress({
-        programAddress: PERPS_PROGRAM_ADDRESS,
-        seeds: [
-          getBytesEncoder().encode(
-            new Uint8Array([111, 114, 97, 99, 108, 101]) // "oracle"
-          ),
-        ],
-      });
+      const positionAddress = await derivePositionPda(walletAddress, tokenMint);
 
       // Build the read-only view instruction
       const instruction = getViewPositionPnlInstruction({
@@ -140,7 +111,6 @@ export function usePositionPnl(tokenMint: Address | null) {
       const [positionInfo] = getPositionInfoDecoder().read(bytes, 0);
       setPnl(positionInfo.pnlInfo);
     } catch (err) {
-      console.error("usePositionPnl error:", err);
       setError(
         err instanceof Error ? err : new Error("Failed to fetch position PnL")
       );
@@ -148,11 +118,22 @@ export function usePositionPnl(tokenMint: Address | null) {
     } finally {
       setIsLoading(false);
     }
-  }, [walletAddress, tokenMint, client]);
+  }, [walletAddress, tokenMint, client, marketsAddress, oracleAddress]);
 
   useEffect(() => {
     fetchPnl();
   }, [fetchPnl]);
+
+  // Auto-refresh PnL every 5 seconds when we have a position
+  useEffect(() => {
+    if (!tokenMint || !walletAddress) return;
+    
+    const interval = setInterval(() => {
+      fetchPnl();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [tokenMint, walletAddress, fetchPnl]);
 
   return { pnl, isLoading, error, refresh: fetchPnl };
 }

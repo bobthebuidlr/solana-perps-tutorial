@@ -38,14 +38,14 @@ const MARKETS: Array<{
     symbol: "SOL",
     name: "SOL-PERP",
     mint: "So11111111111111111111111111111111111111112",
-    vol: 0.8,
+    vol: 8.4,
     floor: 1,
   },
   {
     symbol: "BTC",
     name: "BTC-PERP",
     mint: "BTCNmZvXfaRA1b1j1FVFnLX8sqzVq7BPtLNqvdxJperp",
-    vol: 0.6,
+    vol: 5.6,
     floor: 100,
   },
 ];
@@ -190,14 +190,18 @@ async function main() {
     if (entry && entry.price.toNumber() > 0) {
       prices[market.symbol] = entry.price.toNumber() / PRICE_DECIMALS;
       console.log(
-        `Seeded ${market.symbol} from chain: ${formatUsd(prices[market.symbol])}`
+        `Seeded ${market.symbol} from chain: ${formatUsd(
+          prices[market.symbol]
+        )}`
       );
     } else {
       // Sensible fallback if the market has no price set yet
       const fallback = market.symbol === "BTC" ? 95_000 : 150;
       prices[market.symbol] = fallback;
       console.log(
-        `No on-chain price for ${market.symbol}, using fallback: ${formatUsd(fallback)}`
+        `No on-chain price for ${market.symbol}, using fallback: ${formatUsd(
+          fallback
+        )}`
       );
     }
   }
@@ -251,8 +255,7 @@ async function main() {
           .accounts({ oracle: oraclePda })
           .rpc();
       } catch (err) {
-        error =
-          err instanceof Error ? err.message.split("\n")[0] : String(err);
+        error = err instanceof Error ? err.message.split("\n")[0] : String(err);
       }
 
       results.push({

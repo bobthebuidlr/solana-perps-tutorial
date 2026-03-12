@@ -1,6 +1,5 @@
 use anchor_lang::prelude::*;
 
-use crate::constants::MAX_POSITIONS;
 use crate::error::ErrorCode;
 use crate::MAX_MARKETS;
 
@@ -67,10 +66,6 @@ pub struct UserAccount {
 
     pub collateral: u64,
     pub locked_collateral: u64,
-
-    // Positions the user has open
-    #[max_len(MAX_POSITIONS)]
-    pub positions: Vec<Pubkey>,
 
     // PDA bump seed
     pub bump: u8,

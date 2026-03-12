@@ -23,8 +23,6 @@ pub const VAULT_SEED: &[u8] = b"vault";
 
 pub const ANCHOR_DISCRIMINATOR: usize = 8;
 
-pub const MAX_POSITIONS: usize = 2;
-
 pub const MAX_MARKETS: usize = 10;
 
 // Funding rate parameters

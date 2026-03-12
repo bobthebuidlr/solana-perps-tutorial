@@ -1,5 +1,4 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
 use crate::{
     calculate_funding_pnl, calculate_price_pnl, constants::*, error::ErrorCode,
@@ -35,26 +34,9 @@ pub struct ClosePosition<'info> {
     pub markets: Account<'info, Markets>,
 
     pub oracle: Account<'info, Oracle>,
-
-    /// Vault PDA that holds all user USDC — signs outbound transfers
-    #[account(
-        mut,
-        seeds = [VAULT_SEED],
-        bump
-    )]
-    pub vault: Account<'info, TokenAccount>,
-
-    /// User's USDC token account to receive settlement
-    #[account(
-        mut,
-        constraint = user_token_account.owner == user.key() @ ErrorCode::UnauthorizedAccess
-    )]
-    pub user_token_account: Account<'info, TokenAccount>,
-
-    pub token_program: Program<'info, Token>,
 }
 
-/// Closes an open position and settles PnL from the vault to the user's token account.
+/// Closes an open position and settles PnL to the user's collateral account.
 /// Updates OI on the market and removes the position from the user account.
 /// @param ctx - Accounts context.
 /// @param token_mint - The token mint of the market being closed.
@@ -91,50 +73,38 @@ pub fn handler(ctx: Context<ClosePosition>, token_mint: Pubkey) -> Result<()> {
         .checked_add(funding_pnl)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
 
-    // Settlement = collateral + PnL, floored at 0 (trader cannot owe more than collateral)
-    let settlement_amount = (position.collateral as i64)
-        .checked_add(total_pnl)
-        .ok_or(ErrorCode::ArithmeticOverflow)?
-        .max(0) as u64;
-
-    require!(
-        ctx.accounts.vault.amount >= settlement_amount,
-        ErrorCode::InsufficientVaultFunds
-    );
-
-    // CPI: vault PDA signs the transfer to user_token_account
-    let vault_bump = ctx.bumps.vault;
-    let vault_seeds: &[&[u8]] = &[VAULT_SEED, &[vault_bump]];
-    let signer_seeds = &[vault_seeds];
-
-    let cpi_accounts = Transfer {
-        from: ctx.accounts.vault.to_account_info(),
-        to: ctx.accounts.user_token_account.to_account_info(),
-        authority: ctx.accounts.vault.to_account_info(),
-    };
-    let cpi_ctx = CpiContext::new_with_signer(
-        ctx.accounts.token_program.key(),
-        cpi_accounts,
-        signer_seeds,
-    );
-    token::transfer(cpi_ctx, settlement_amount)?;
-
     let position_collateral = position.collateral;
     let position_direction = position.direction;
-    let position_key = ctx.accounts.position.key();
 
-    // Update user account: deduct the actual vault outflow from collateral tracking,
-    // then release the locked amount. Using saturating_sub because a large profit could
-    // theoretically exceed the user's own recorded collateral (funded by pool reserves).
+    // Update user's collateral: apply PnL only (don't subtract position collateral)
+    // The position collateral is already tracked in locked_collateral
+    // New collateral = current_collateral + total_pnl
     let user_account = &mut ctx.accounts.user_account;
-    user_account.collateral = user_account.collateral.saturating_sub(settlement_amount);
+
+    // Apply the PnL (can be positive or negative) to total collateral
+    // If the result would be negative (user lost more than total collateral), floor at 0
+    let new_collateral = if total_pnl >= 0 {
+        user_account
+            .collateral
+            .checked_add(total_pnl as u64)
+            .ok_or(ErrorCode::ArithmeticOverflow)?
+    } else {
+        let abs_loss = total_pnl.abs() as u64;
+        if abs_loss > user_account.collateral {
+            0
+        } else {
+            user_account
+                .collateral
+                .checked_sub(abs_loss)
+                .ok_or(ErrorCode::ArithmeticOverflow)?
+        }
+    };
+
+    user_account.collateral = new_collateral;
     user_account.locked_collateral = user_account
         .locked_collateral
         .checked_sub(position_collateral)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
-
-    // Remove position from the user's positions list
-    user_account.positions.retain(|p| *p != position_key);
 
     // Decrease market OI
     match position_direction {
@@ -156,7 +126,10 @@ pub fn handler(ctx: Context<ClosePosition>, token_mint: Pubkey) -> Result<()> {
     msg!("Price PnL: {}", price_pnl);
     msg!("Funding PnL: {}", funding_pnl);
     msg!("Total PnL: {}", total_pnl);
-    msg!("Settlement paid: {} USDC (6-decimal)", settlement_amount);
+    msg!(
+        "Updated user collateral: {} USDC (6-decimal)",
+        user_account.collateral
+    );
 
     Ok(())
 }

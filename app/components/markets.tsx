@@ -1,6 +1,5 @@
 "use client";
 
-import { type Address } from "@solana/kit";
 import { useWalletConnection } from "@solana/react-hooks";
 import { useEffect, useState } from "react";
 import { type PerpsMarket } from "../generated/perps";
@@ -12,74 +11,27 @@ import { useOpenPosition } from "../hooks/useOpenPosition";
 import { useOraclePrices } from "../hooks/useOraclePrices";
 import { useTokenAccount } from "../hooks/useTokenAccount";
 import { useTokenBalance } from "../hooks/useTokenBalance";
-
-const USDC_DECIMALS = 6;
-const TOKEN_DECIMALS = 6; // position size stored with 6-decimal precision
-const USDC_MINT_ADDRESS =
-  "3xcGW4uvAGbfiPUieTJLg4fMbL3SposFqRJp5WgTzooL" as Address;
+import { TOKEN_DECIMALS, USDC_DECIMALS, USDC_MINT_ADDRESS } from "../lib/constants";
+import { fmt, formatUsdc, getSymbol, iconColorClass } from "../lib/format";
 
 /**
- * Formats a raw bigint USDC amount into a two-decimal display string.
- * @param amount - Raw amount in base units (10^6 per USDC), or null.
- * @returns Human-readable string like "123.45".
- */
-function formatUsdc(amount: bigint | null): string {
-  if (amount === null) return "0.00";
-  const divisor = BigInt(10 ** USDC_DECIMALS);
-  const whole = amount / divisor;
-  const frac = (amount % divisor).toString().padStart(USDC_DECIMALS, "0");
-  return `${whole}.${frac.slice(0, 2)}`;
-}
-
-/**
- * Extracts the base ticker from a market name (e.g. "SOL-PERP" → "SOL").
- * @param name - Raw market name string.
- * @returns Uppercase ticker symbol, max 4 chars.
- */
-function getSymbol(name: string): string {
-  return (name.split("-")[0] ?? name).slice(0, 4).toUpperCase();
-}
-
-/**
- * Returns a deterministic Tailwind color pair for a market icon avatar.
- * @param name - Market name used to hash into the palette.
- * @returns Tailwind class string for background and text color.
- */
-function iconColorClass(name: string): string {
-  const palette = [
-    "bg-blue-500/15 text-blue-500",
-    "bg-violet-500/15 text-violet-500",
-    "bg-emerald-500/15 text-emerald-500",
-    "bg-orange-500/15 text-orange-500",
-    "bg-pink-500/15 text-pink-500",
-    "bg-cyan-500/15 text-cyan-500",
-  ];
-  const hash = [...name].reduce((a, c) => a + c.charCodeAt(0), 0);
-  return palette[hash % palette.length]!;
-}
-
-/**
- * Formats a bigint into a compact human-readable string (K / M suffix).
- * @param val - Raw bigint value.
- * @returns Formatted string, e.g. "1.23M" or "456K".
- */
-function fmt(val: bigint): string {
-  const n = Number(val);
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(2)}K`;
-  return n.toLocaleString();
-}
-
-/**
- * Combined markets list + order form panel.
- * Left column: clickable market rows, first market auto-selected.
- * Right column: order form scoped to the selected market.
+ * Markets component manages the selected market state and passes it to children.
+ * Automatically pre-selects the first market when loaded.
  */
 export function Markets() {
   const { markets, isLoading, error, refresh } = useMarkets();
   const [selectedMarket, setSelectedMarket] = useState<PerpsMarket | null>(
     null
   );
+
+  // Auto-select first market when markets load
+  useEffect(() => {
+    if (markets && markets.length > 0 && !selectedMarket) {
+      // Use setTimeout to avoid synchronous setState in effect
+      const timer = setTimeout(() => setSelectedMarket(markets[0]), 0);
+      return () => clearTimeout(timer);
+    }
+  }, [markets, selectedMarket]);
 
   if (isLoading) {
     return (
@@ -123,9 +75,88 @@ export function Markets() {
   }
 
   return (
-    <div className="grid grid-cols-[3fr_2fr] overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
-      {/* ── Left: market list ──────────────────────────────────────────────── */}
-      <div className="border-r border-border-low p-6">
+    <>
+      <MarketsList
+        markets={markets}
+        isLoading={isLoading}
+        error={error}
+        refresh={refresh}
+        selectedMarket={selectedMarket}
+        onSelectMarket={setSelectedMarket}
+      />
+      <OrderForm market={selectedMarket} />
+    </>
+  );
+}
+
+/**
+ * MarketsList displays the list of available markets.
+ * @param markets - Array of market data.
+ * @param isLoading - Loading state.
+ * @param error - Error state.
+ * @param refresh - Refresh callback.
+ * @param selectedMarket - Currently selected market.
+ * @param onSelectMarket - Callback to select a market.
+ */
+export function MarketsList({
+  markets,
+  isLoading,
+  error,
+  refresh,
+  selectedMarket,
+  onSelectMarket,
+}: {
+  markets: PerpsMarket[] | null;
+  isLoading: boolean;
+  error: Error | null;
+  refresh: () => void;
+  selectedMarket: PerpsMarket | null;
+  onSelectMarket: (market: PerpsMarket) => void;
+}) {
+  if (isLoading) {
+    return (
+      <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
+        <div className="p-6 space-y-2">
+          {[...Array(3)].map((_, i) => (
+            <div
+              key={i}
+              className="h-14 animate-pulse rounded-xl bg-cream/50"
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="overflow-hidden rounded-2xl border border-border-low bg-card p-6 shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
+        <div className="rounded-xl border border-red-500/20 bg-red-50/50 px-4 py-3 text-sm">
+          <p className="text-red-600">{error.message}</p>
+          <button
+            onClick={refresh}
+            className="mt-2 rounded-lg bg-foreground px-3 py-1.5 text-xs font-medium text-background transition hover:opacity-90"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!markets || markets.length === 0) {
+    return (
+      <div className="overflow-hidden rounded-2xl border border-border-low bg-card p-6 shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
+        <div className="rounded-xl bg-cream/50 px-4 py-8 text-center text-sm text-muted">
+          No markets available
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
+      <div className="p-6">
         <div className="mb-4 flex items-center justify-between">
           <p className="text-sm font-semibold">Markets</p>
           <span className="rounded-full bg-cream px-2.5 py-0.5 text-xs font-semibold text-foreground/70">
@@ -157,22 +188,17 @@ export function Markets() {
                   selectedMarket?.tokenMint.toString() ===
                   market.tokenMint.toString()
                 }
-                onClick={() => setSelectedMarket(market)}
+                onClick={() => onSelectMarket(market)}
               />
             ))}
           </tbody>
         </table>
       </div>
-
-      {/* ── Right: order form ─────────────────────────────────────────────── */}
-      <div className="p-6">
-        <OrderForm market={selectedMarket} />
-      </div>
     </div>
   );
 }
 
-// ── Market list ────────────────────────────────────────────────────────────────
+// ── Market list row ────────────────────────────────────────────────────────────────
 
 /**
  * Clickable row in the market list.
@@ -268,7 +294,7 @@ function MarketRow({
  * direction toggle, size input (in token quantity), and submitting the open-position tx.
  * @param market - The currently selected market, or null.
  */
-function OrderForm({ market }: { market: PerpsMarket | null }) {
+export function OrderForm({ market }: { market: PerpsMarket | null }) {
   const { wallet } = useWalletConnection();
   const {
     collateral,
@@ -309,10 +335,11 @@ function OrderForm({ market }: { market: PerpsMarket | null }) {
   const maxQtyDisplay = Number(maxQtyBase) / 10 ** TOKEN_DECIMALS;
 
   // Reset form whenever the selected market changes
+  const marketTokenMint = market?.tokenMint.toString();
   useEffect(() => {
     setSizeInput("");
     setTxSuccess(false);
-  }, [market?.tokenMint.toString()]);
+  }, [marketTokenMint]);
 
   /**
    * Submits the open-position transaction with token quantity as size.
@@ -333,18 +360,22 @@ function OrderForm({ market }: { market: PerpsMarket | null }) {
 
   if (!walletAddress) {
     return (
-      <div className="flex h-full flex-col items-center justify-center py-16 text-center gap-2">
-        <p className="text-sm text-muted">Connect your wallet to trade.</p>
+      <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
+        <div className="flex h-full flex-col items-center justify-center p-6 py-16 text-center gap-2">
+          <p className="text-sm text-muted">Connect your wallet to trade.</p>
+        </div>
       </div>
     );
   }
 
   if (collateralLoading || pricesLoading) {
     return (
-      <div className="space-y-3 pt-2">
-        <div className="h-9 animate-pulse rounded-xl bg-cream/50" />
-        <div className="h-20 animate-pulse rounded-xl bg-cream/50" />
-        <div className="h-12 animate-pulse rounded-xl bg-cream/50" />
+      <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
+        <div className="space-y-3 p-6">
+          <div className="h-9 animate-pulse rounded-xl bg-cream/50" />
+          <div className="h-20 animate-pulse rounded-xl bg-cream/50" />
+          <div className="h-12 animate-pulse rounded-xl bg-cream/50" />
+        </div>
       </div>
     );
   }
@@ -367,7 +398,8 @@ function OrderForm({ market }: { market: PerpsMarket | null }) {
   if (!hasCollateral) {
     return (
       <>
-        <div className="space-y-4">
+        <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
+        <div className="space-y-4 p-6">
           {market && (
             <MarketHeader
               symbol={symbol}
@@ -393,6 +425,7 @@ function OrderForm({ market }: { market: PerpsMarket | null }) {
             </button>
           </div>
         </div>
+        </div>
 
         {depositOpen && (
           <DepositDialog
@@ -409,7 +442,8 @@ function OrderForm({ market }: { market: PerpsMarket | null }) {
 
   return (
     <>
-      <div className="space-y-4">
+      <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
+      <div className="space-y-4 p-6">
         {/* Market header + available collateral */}
         <div className="flex items-center justify-between">
           {market && (
@@ -588,6 +622,7 @@ function OrderForm({ market }: { market: PerpsMarket | null }) {
             {openError.message}
           </div>
         )}
+      </div>
       </div>
 
       {depositOpen && (

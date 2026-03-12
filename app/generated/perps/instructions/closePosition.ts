@@ -58,10 +58,6 @@ export type ClosePositionInstruction<
   TAccountPosition extends string | AccountMeta<string> = string,
   TAccountMarkets extends string | AccountMeta<string> = string,
   TAccountOracle extends string | AccountMeta<string> = string,
-  TAccountVault extends string | AccountMeta<string> = string,
-  TAccountUserTokenAccount extends string | AccountMeta<string> = string,
-  TAccountTokenProgram extends string | AccountMeta<string> =
-    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
@@ -82,15 +78,6 @@ export type ClosePositionInstruction<
       TAccountOracle extends string
         ? ReadonlyAccount<TAccountOracle>
         : TAccountOracle,
-      TAccountVault extends string
-        ? WritableAccount<TAccountVault>
-        : TAccountVault,
-      TAccountUserTokenAccount extends string
-        ? WritableAccount<TAccountUserTokenAccount>
-        : TAccountUserTokenAccount,
-      TAccountTokenProgram extends string
-        ? ReadonlyAccount<TAccountTokenProgram>
-        : TAccountTokenProgram,
       ...TRemainingAccounts,
     ]
   >;
@@ -135,9 +122,6 @@ export type ClosePositionAsyncInput<
   TAccountPosition extends string = string,
   TAccountMarkets extends string = string,
   TAccountOracle extends string = string,
-  TAccountVault extends string = string,
-  TAccountUserTokenAccount extends string = string,
-  TAccountTokenProgram extends string = string,
 > = {
   /** User closing the position */
   user: TransactionSigner<TAccountUser>;
@@ -148,11 +132,6 @@ export type ClosePositionAsyncInput<
   /** Markets account — updated to adjust OI */
   markets: Address<TAccountMarkets>;
   oracle: Address<TAccountOracle>;
-  /** Vault PDA that holds all user USDC — signs outbound transfers */
-  vault?: Address<TAccountVault>;
-  /** User's USDC token account to receive settlement */
-  userTokenAccount: Address<TAccountUserTokenAccount>;
-  tokenProgram?: Address<TAccountTokenProgram>;
   tokenMint: ClosePositionInstructionDataArgs["tokenMint"];
 };
 
@@ -162,9 +141,6 @@ export async function getClosePositionInstructionAsync<
   TAccountPosition extends string,
   TAccountMarkets extends string,
   TAccountOracle extends string,
-  TAccountVault extends string,
-  TAccountUserTokenAccount extends string,
-  TAccountTokenProgram extends string,
   TProgramAddress extends Address = typeof PERPS_PROGRAM_ADDRESS,
 >(
   input: ClosePositionAsyncInput<
@@ -172,10 +148,7 @@ export async function getClosePositionInstructionAsync<
     TAccountUserAccount,
     TAccountPosition,
     TAccountMarkets,
-    TAccountOracle,
-    TAccountVault,
-    TAccountUserTokenAccount,
-    TAccountTokenProgram
+    TAccountOracle
   >,
   config?: { programAddress?: TProgramAddress },
 ): Promise<
@@ -185,10 +158,7 @@ export async function getClosePositionInstructionAsync<
     TAccountUserAccount,
     TAccountPosition,
     TAccountMarkets,
-    TAccountOracle,
-    TAccountVault,
-    TAccountUserTokenAccount,
-    TAccountTokenProgram
+    TAccountOracle
   >
 > {
   // Program address.
@@ -201,12 +171,6 @@ export async function getClosePositionInstructionAsync<
     position: { value: input.position ?? null, isWritable: true },
     markets: { value: input.markets ?? null, isWritable: true },
     oracle: { value: input.oracle ?? null, isWritable: false },
-    vault: { value: input.vault ?? null, isWritable: true },
-    userTokenAccount: {
-      value: input.userTokenAccount ?? null,
-      isWritable: true,
-    },
-    tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -238,18 +202,6 @@ export async function getClosePositionInstructionAsync<
       ],
     });
   }
-  if (!accounts.vault.value) {
-    accounts.vault.value = await getProgramDerivedAddress({
-      programAddress,
-      seeds: [
-        getBytesEncoder().encode(new Uint8Array([118, 97, 117, 108, 116])),
-      ],
-    });
-  }
-  if (!accounts.tokenProgram.value) {
-    accounts.tokenProgram.value =
-      "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address<"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA">;
-  }
 
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
@@ -259,9 +211,6 @@ export async function getClosePositionInstructionAsync<
       getAccountMeta(accounts.position),
       getAccountMeta(accounts.markets),
       getAccountMeta(accounts.oracle),
-      getAccountMeta(accounts.vault),
-      getAccountMeta(accounts.userTokenAccount),
-      getAccountMeta(accounts.tokenProgram),
     ],
     data: getClosePositionInstructionDataEncoder().encode(
       args as ClosePositionInstructionDataArgs,
@@ -273,10 +222,7 @@ export async function getClosePositionInstructionAsync<
     TAccountUserAccount,
     TAccountPosition,
     TAccountMarkets,
-    TAccountOracle,
-    TAccountVault,
-    TAccountUserTokenAccount,
-    TAccountTokenProgram
+    TAccountOracle
   >);
 }
 
@@ -286,9 +232,6 @@ export type ClosePositionInput<
   TAccountPosition extends string = string,
   TAccountMarkets extends string = string,
   TAccountOracle extends string = string,
-  TAccountVault extends string = string,
-  TAccountUserTokenAccount extends string = string,
-  TAccountTokenProgram extends string = string,
 > = {
   /** User closing the position */
   user: TransactionSigner<TAccountUser>;
@@ -299,11 +242,6 @@ export type ClosePositionInput<
   /** Markets account — updated to adjust OI */
   markets: Address<TAccountMarkets>;
   oracle: Address<TAccountOracle>;
-  /** Vault PDA that holds all user USDC — signs outbound transfers */
-  vault: Address<TAccountVault>;
-  /** User's USDC token account to receive settlement */
-  userTokenAccount: Address<TAccountUserTokenAccount>;
-  tokenProgram?: Address<TAccountTokenProgram>;
   tokenMint: ClosePositionInstructionDataArgs["tokenMint"];
 };
 
@@ -313,9 +251,6 @@ export function getClosePositionInstruction<
   TAccountPosition extends string,
   TAccountMarkets extends string,
   TAccountOracle extends string,
-  TAccountVault extends string,
-  TAccountUserTokenAccount extends string,
-  TAccountTokenProgram extends string,
   TProgramAddress extends Address = typeof PERPS_PROGRAM_ADDRESS,
 >(
   input: ClosePositionInput<
@@ -323,10 +258,7 @@ export function getClosePositionInstruction<
     TAccountUserAccount,
     TAccountPosition,
     TAccountMarkets,
-    TAccountOracle,
-    TAccountVault,
-    TAccountUserTokenAccount,
-    TAccountTokenProgram
+    TAccountOracle
   >,
   config?: { programAddress?: TProgramAddress },
 ): ClosePositionInstruction<
@@ -335,10 +267,7 @@ export function getClosePositionInstruction<
   TAccountUserAccount,
   TAccountPosition,
   TAccountMarkets,
-  TAccountOracle,
-  TAccountVault,
-  TAccountUserTokenAccount,
-  TAccountTokenProgram
+  TAccountOracle
 > {
   // Program address.
   const programAddress = config?.programAddress ?? PERPS_PROGRAM_ADDRESS;
@@ -350,12 +279,6 @@ export function getClosePositionInstruction<
     position: { value: input.position ?? null, isWritable: true },
     markets: { value: input.markets ?? null, isWritable: true },
     oracle: { value: input.oracle ?? null, isWritable: false },
-    vault: { value: input.vault ?? null, isWritable: true },
-    userTokenAccount: {
-      value: input.userTokenAccount ?? null,
-      isWritable: true,
-    },
-    tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -365,12 +288,6 @@ export function getClosePositionInstruction<
   // Original args.
   const args = { ...input };
 
-  // Resolve default values.
-  if (!accounts.tokenProgram.value) {
-    accounts.tokenProgram.value =
-      "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address<"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA">;
-  }
-
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
     accounts: [
@@ -379,9 +296,6 @@ export function getClosePositionInstruction<
       getAccountMeta(accounts.position),
       getAccountMeta(accounts.markets),
       getAccountMeta(accounts.oracle),
-      getAccountMeta(accounts.vault),
-      getAccountMeta(accounts.userTokenAccount),
-      getAccountMeta(accounts.tokenProgram),
     ],
     data: getClosePositionInstructionDataEncoder().encode(
       args as ClosePositionInstructionDataArgs,
@@ -393,10 +307,7 @@ export function getClosePositionInstruction<
     TAccountUserAccount,
     TAccountPosition,
     TAccountMarkets,
-    TAccountOracle,
-    TAccountVault,
-    TAccountUserTokenAccount,
-    TAccountTokenProgram
+    TAccountOracle
   >);
 }
 
@@ -415,11 +326,6 @@ export type ParsedClosePositionInstruction<
     /** Markets account — updated to adjust OI */
     markets: TAccountMetas[3];
     oracle: TAccountMetas[4];
-    /** Vault PDA that holds all user USDC — signs outbound transfers */
-    vault: TAccountMetas[5];
-    /** User's USDC token account to receive settlement */
-    userTokenAccount: TAccountMetas[6];
-    tokenProgram: TAccountMetas[7];
   };
   data: ClosePositionInstructionData;
 };
@@ -432,7 +338,7 @@ export function parseClosePositionInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedClosePositionInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 8) {
+  if (instruction.accounts.length < 5) {
     // TODO: Coded error.
     throw new Error("Not enough accounts");
   }
@@ -450,9 +356,6 @@ export function parseClosePositionInstruction<
       position: getNextAccount(),
       markets: getNextAccount(),
       oracle: getNextAccount(),
-      vault: getNextAccount(),
-      userTokenAccount: getNextAccount(),
-      tokenProgram: getNextAccount(),
     },
     data: getClosePositionInstructionDataDecoder().decode(instruction.data),
   };

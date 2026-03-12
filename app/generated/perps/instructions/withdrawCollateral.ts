@@ -16,6 +16,8 @@ import {
   getProgramDerivedAddress,
   getStructDecoder,
   getStructEncoder,
+  getU64Decoder,
+  getU64Encoder,
   transformEncoder,
   type AccountMeta,
   type AccountSignerMeta,
@@ -83,13 +85,17 @@ export type WithdrawCollateralInstruction<
 
 export type WithdrawCollateralInstructionData = {
   discriminator: ReadonlyUint8Array;
+  amount: bigint;
 };
 
-export type WithdrawCollateralInstructionDataArgs = {};
+export type WithdrawCollateralInstructionDataArgs = { amount: number | bigint };
 
 export function getWithdrawCollateralInstructionDataEncoder(): FixedSizeEncoder<WithdrawCollateralInstructionDataArgs> {
   return transformEncoder(
-    getStructEncoder([["discriminator", fixEncoderSize(getBytesEncoder(), 8)]]),
+    getStructEncoder([
+      ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
+      ["amount", getU64Encoder()],
+    ]),
     (value) => ({ ...value, discriminator: WITHDRAW_COLLATERAL_DISCRIMINATOR }),
   );
 }
@@ -97,6 +103,7 @@ export function getWithdrawCollateralInstructionDataEncoder(): FixedSizeEncoder<
 export function getWithdrawCollateralInstructionDataDecoder(): FixedSizeDecoder<WithdrawCollateralInstructionData> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
+    ["amount", getU64Decoder()],
   ]);
 }
 
@@ -126,6 +133,7 @@ export type WithdrawCollateralAsyncInput<
   /** User's USDC token account to receive the withdrawn collateral */
   userTokenAccount: Address<TAccountUserTokenAccount>;
   tokenProgram?: Address<TAccountTokenProgram>;
+  amount: WithdrawCollateralInstructionDataArgs["amount"];
 };
 
 export async function getWithdrawCollateralInstructionAsync<
@@ -173,6 +181,9 @@ export async function getWithdrawCollateralInstructionAsync<
     ResolvedAccount
   >;
 
+  // Original args.
+  const args = { ...input };
+
   // Resolve default values.
   if (!accounts.userAccount.value) {
     accounts.userAccount.value = await getProgramDerivedAddress({
@@ -205,7 +216,9 @@ export async function getWithdrawCollateralInstructionAsync<
       getAccountMeta(accounts.userTokenAccount),
       getAccountMeta(accounts.tokenProgram),
     ],
-    data: getWithdrawCollateralInstructionDataEncoder().encode({}),
+    data: getWithdrawCollateralInstructionDataEncoder().encode(
+      args as WithdrawCollateralInstructionDataArgs,
+    ),
     programAddress,
   } as WithdrawCollateralInstruction<
     TProgramAddress,
@@ -233,6 +246,7 @@ export type WithdrawCollateralInput<
   /** User's USDC token account to receive the withdrawn collateral */
   userTokenAccount: Address<TAccountUserTokenAccount>;
   tokenProgram?: Address<TAccountTokenProgram>;
+  amount: WithdrawCollateralInstructionDataArgs["amount"];
 };
 
 export function getWithdrawCollateralInstruction<
@@ -278,6 +292,9 @@ export function getWithdrawCollateralInstruction<
     ResolvedAccount
   >;
 
+  // Original args.
+  const args = { ...input };
+
   // Resolve default values.
   if (!accounts.tokenProgram.value) {
     accounts.tokenProgram.value =
@@ -293,7 +310,9 @@ export function getWithdrawCollateralInstruction<
       getAccountMeta(accounts.userTokenAccount),
       getAccountMeta(accounts.tokenProgram),
     ],
-    data: getWithdrawCollateralInstructionDataEncoder().encode({}),
+    data: getWithdrawCollateralInstructionDataEncoder().encode(
+      args as WithdrawCollateralInstructionDataArgs,
+    ),
     programAddress,
   } as WithdrawCollateralInstruction<
     TProgramAddress,

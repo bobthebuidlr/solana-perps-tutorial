@@ -1,17 +1,12 @@
-import {
-  getAddressEncoder,
-  getBytesEncoder,
-  getProgramDerivedAddress,
-  type Address,
-} from "@solana/kit";
+import { type Address } from "@solana/kit";
 import { useSendTransaction, useWalletConnection } from "@solana/react-hooks";
 import { useCallback, useState } from "react";
 import { PERPS_PROGRAM_ADDRESS } from "../generated/perps";
 import { getOpenPositionInstructionDataEncoder } from "../generated/perps/instructions/openPosition";
 import { PositionDirection } from "../generated/perps/types/positionDirection";
-
-const SYSTEM_PROGRAM_ADDRESS =
-  "11111111111111111111111111111111" as Address;
+import { SYSTEM_PROGRAM_ADDRESS } from "../lib/constants";
+import { derivePositionPda } from "../lib/pdas";
+import { useMarketsPda, useOraclePda, useUserAccountPda } from "./usePdas";
 
 /**
  * Hook to open a perpetual futures position on-chain.
@@ -27,6 +22,9 @@ export function useOpenPosition() {
   const [error, setError] = useState<Error | null>(null);
 
   const walletAddress = wallet?.account.address;
+  const userAccountAddress = useUserAccountPda(walletAddress);
+  const marketsAddress = useMarketsPda();
+  const oracleAddress = useOraclePda();
 
   /**
    * Sends an openPosition instruction for the given market and parameters.
@@ -42,8 +40,8 @@ export function useOpenPosition() {
       direction: PositionDirection,
       amount: number
     ): Promise<string | null> => {
-      if (!walletAddress || !wallet) {
-        console.error("❌ OpenPosition: no wallet connected");
+      if (!walletAddress || !wallet || !userAccountAddress || !marketsAddress || !oracleAddress) {
+        console.error("❌ OpenPosition: missing required accounts");
         return null;
       }
 
@@ -51,67 +49,18 @@ export function useOpenPosition() {
       setError(null);
 
       try {
-        // Derive user account PDA
-        const [userAccountAddress] = await getProgramDerivedAddress({
-          programAddress: PERPS_PROGRAM_ADDRESS,
-          seeds: [
-            getBytesEncoder().encode(new Uint8Array([117, 115, 101, 114])), // "user"
-            getAddressEncoder().encode(walletAddress),
-          ],
-        });
-
         // Derive position PDA (unique per user + tokenMint)
-        const [positionAddress] = await getProgramDerivedAddress({
-          programAddress: PERPS_PROGRAM_ADDRESS,
-          seeds: [
-            getBytesEncoder().encode(
-              new Uint8Array([112, 111, 115, 105, 116, 105, 111, 110]) // "position"
-            ),
-            getAddressEncoder().encode(walletAddress),
-            getAddressEncoder().encode(tokenMint),
-          ],
-        });
-
-        // Derive markets PDA
-        const [marketsAddress] = await getProgramDerivedAddress({
-          programAddress: PERPS_PROGRAM_ADDRESS,
-          seeds: [
-            getBytesEncoder().encode(
-              new Uint8Array([109, 97, 114, 107, 101, 116, 115]) // "markets"
-            ),
-          ],
-        });
-
-        // Derive oracle PDA
-        const [oracleAddress] = await getProgramDerivedAddress({
-          programAddress: PERPS_PROGRAM_ADDRESS,
-          seeds: [
-            getBytesEncoder().encode(
-              new Uint8Array([111, 114, 97, 99, 108, 101]) // "oracle"
-            ),
-          ],
-        });
-
-        console.log("🔍 OpenPosition accounts:", {
-          user: walletAddress,
-          userAccount: userAccountAddress,
-          position: positionAddress,
-          markets: marketsAddress,
-          oracle: oracleAddress,
-          tokenMint,
-          direction,
-          amount,
-        });
+        const positionAddress = await derivePositionPda(walletAddress, tokenMint);
 
         const instruction = {
           programAddress: PERPS_PROGRAM_ADDRESS,
           accounts: [
-            { address: walletAddress, role: 3 },         // user (WritableSigner)
-            { address: userAccountAddress, role: 1 },    // userAccount (Writable)
-            { address: positionAddress, role: 1 },       // position (Writable)
-            { address: marketsAddress, role: 1 },        // markets (Writable)
-            { address: oracleAddress, role: 0 },         // oracle (Readonly)
-            { address: SYSTEM_PROGRAM_ADDRESS, role: 0 }, // systemProgram (Readonly)
+            { address: walletAddress, role: 3 },              // user (WritableSigner)
+            { address: userAccountAddress, role: 1 },         // userAccount (Writable)
+            { address: positionAddress, role: 1 },            // position (Writable)
+            { address: marketsAddress, role: 1 },             // markets (Writable)
+            { address: oracleAddress, role: 0 },              // oracle (Readonly)
+            { address: SYSTEM_PROGRAM_ADDRESS, role: 0 },     // systemProgram (Readonly)
           ],
           data: getOpenPositionInstructionDataEncoder().encode({
             tokenMint,
@@ -124,7 +73,6 @@ export function useOpenPosition() {
           { instructions: [instruction] },
           { skipPreflight: true },
         );
-        console.log("✅ Position opened:", signature);
         return signature;
       } catch (err) {
         console.error("❌ OpenPosition failed:", err);
@@ -135,7 +83,7 @@ export function useOpenPosition() {
         setIsLoading(false);
       }
     },
-    [send, walletAddress, wallet]
+    [send, walletAddress, wallet, userAccountAddress, marketsAddress, oracleAddress]
   );
 
   return { openPosition, isLoading, error };

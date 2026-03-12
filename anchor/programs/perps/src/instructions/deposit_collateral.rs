@@ -24,7 +24,11 @@ pub struct DepositCollateral<'info> {
     )]
     pub user_token_account: Account<'info, TokenAccount>,
 
-    #[account(mut)]
+    #[account(
+      mut,
+      seeds = [VAULT_SEED],
+      bump
+    )]
     pub vault: Account<'info, TokenAccount>,
 
     pub token_program: Program<'info, Token>,
@@ -40,7 +44,6 @@ pub fn handler(ctx: Context<DepositCollateral>, amount: u64) -> Result<()> {
         user_account.authority = ctx.accounts.user.key();
         user_account.collateral = 0;
         user_account.locked_collateral = 0;
-        user_account.positions = Vec::with_capacity(MAX_POSITIONS);
         user_account.bump = ctx.bumps.user_account;
     }
 

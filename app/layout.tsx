@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Inter } from "next/font/google";
-import { Markets } from "./components/markets";
+import { Markets, MarketsList, OrderForm } from "./components/markets";
 import { PositionsTable } from "./components/positions-table";
+import { AccountOverview } from "./components/account-overview";
 import { Providers } from "./components/providers";
 import { WalletConnectButton } from "./components/wallet-connect-button";
 import "./globals.css";
@@ -35,17 +36,22 @@ export default function RootLayout({
   return (
     <html lang="en">
       <Providers>
-        <nav className="flex justify-between items-center py-2 px-10 border-b">
-          <h1 className="text-2xl font-bold">Perps Dex</h1>
-          <WalletConnectButton />
-        </nav>
         <body
           suppressHydrationWarning
           className={`${inter.variable} ${geistMono.variable} antialiased`}
         >
-          <div className="flex flex-col gap-4">
+          <div>
+            <nav className="flex justify-between items-center py-2 px-10 border-b">
+              <h1 className="text-2xl font-bold">Perps Dex</h1>
+              <WalletConnectButton />
+            </nav>
+          </div>
+          <div className="grid grid-cols-2 gap-4 p-4">
+            {/* Top row: Markets list and Order form */}
             <Markets />
+            {/* Bottom row: Positions table and Account overview */}
             <PositionsTable />
+            <AccountOverview />
           </div>
         </body>
       </Providers>

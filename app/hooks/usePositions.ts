@@ -1,21 +1,16 @@
-import {
-  getAddressEncoder,
-  getBytesEncoder,
-  getProgramDerivedAddress,
-} from "@solana/kit";
 import { useSolanaClient, useWalletConnection } from "@solana/react-hooks";
 import { useCallback, useEffect, useState } from "react";
 import {
   fetchAllMaybePosition,
   type Position,
 } from "../generated/perps/accounts/position";
-import { fetchMaybeUserAccount } from "../generated/perps/accounts/userAccount";
-import { PERPS_PROGRAM_ADDRESS } from "../generated/perps/programs/perps";
+import { derivePositionPda } from "../lib/pdas";
+import { useMarkets } from "./useMarkets";
 
 /**
  * Fetches all open Position accounts owned by the connected wallet.
- * Reads the positions array from the user's UserAccount PDA and
- * batch-fetches each Position account in one RPC call.
+ * Derives position PDAs from known markets and batch-fetches to find
+ * which positions exist.
  *
  * @returns positions - Array of decoded Position data; empty when none exist.
  * @returns isLoading - True while the RPC calls are in-flight.
@@ -25,47 +20,33 @@ import { PERPS_PROGRAM_ADDRESS } from "../generated/perps/programs/perps";
 export function usePositions() {
   const client = useSolanaClient();
   const { wallet } = useWalletConnection();
+  const { markets } = useMarkets();
   const [positions, setPositions] = useState<Position[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const walletAddress = wallet?.account.address;
 
-  const fetchPositions = useCallback(async () => {
-    if (!walletAddress || !client?.runtime?.rpc) {
+  const fetchPositions = useCallback(async (silent = false) => {
+    if (!walletAddress || !client?.runtime?.rpc || !markets || markets.length === 0) {
       setPositions([]);
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
       return;
     }
 
-    setIsLoading(true);
+    if (!silent) setIsLoading(true);
     setError(null);
 
     try {
-      // Derive user account PDA
-      const [userAccountAddress] = await getProgramDerivedAddress({
-        programAddress: PERPS_PROGRAM_ADDRESS,
-        seeds: [
-          getBytesEncoder().encode(new Uint8Array([117, 115, 101, 114])), // "user"
-          getAddressEncoder().encode(walletAddress),
-        ],
-      });
-
-      // User account may not exist yet (wallet has never deposited)
-      const maybeUserAccount = await fetchMaybeUserAccount(
-        client.runtime.rpc,
-        userAccountAddress
+      // Derive position PDA for each known market
+      const positionAddresses = await Promise.all(
+        markets.map((m) => derivePositionPda(walletAddress, m.tokenMint))
       );
 
-      if (!maybeUserAccount.exists || maybeUserAccount.data.positions.length === 0) {
-        setPositions([]);
-        return;
-      }
-
-      // Batch-fetch every position account in a single RPC call
+      // Batch-fetch all derived position PDAs in a single RPC call
       const maybePositions = await fetchAllMaybePosition(
         client.runtime.rpc,
-        maybeUserAccount.data.positions
+        positionAddresses
       );
 
       setPositions(
@@ -77,9 +58,9 @@ export function usePositions() {
       console.error("Failed to fetch positions:", err);
       setError(err instanceof Error ? err : new Error("Failed to fetch positions"));
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
-  }, [walletAddress, client]);
+  }, [walletAddress, markets, client]);
 
   useEffect(() => {
     fetchPositions();
