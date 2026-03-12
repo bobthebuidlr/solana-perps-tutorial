@@ -2,11 +2,16 @@
 
 import { type Address } from "@solana/kit";
 import { useWalletConnection } from "@solana/react-hooks";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { useCollateral } from "../hooks/useCollateral";
 import { usePositions } from "../hooks/usePositions";
 import { usePositionPnl } from "../hooks/usePositionPnl";
+import { useDeposit } from "../hooks/useDeposit";
+import { useWithdraw } from "../hooks/useWithdraw";
+import { useTokenAccount } from "../hooks/useTokenAccount";
+import { useTokenBalance } from "../hooks/useTokenBalance";
 import { formatUsdc } from "../lib/format";
+import { USDC_DECIMALS, USDC_MINT_ADDRESS } from "../lib/constants";
 
 /**
  * Account overview component showing user's trading account status.
@@ -23,6 +28,9 @@ export function AccountOverview() {
     refresh: refreshCollateral,
   } = useCollateral();
   const { positions, isLoading: positionsLoading, refresh: refreshPositions } = usePositions();
+  
+  const [depositOpen, setDepositOpen] = useState(false);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
   
   // Auto-refresh positions every 5 seconds (silent refresh)
   useEffect(() => {
@@ -52,14 +60,6 @@ export function AccountOverview() {
   
   const totalEquity = availableCollateral + locked + totalUnrealizedPnl;
 
-  // Calculate percentage of total equity for visualization
-  const totalForPercentage = totalEquity > 0n ? totalEquity : 1n;
-  const availablePct = Number((availableCollateral * 100n) / totalForPercentage);
-  const lockedPct = Number((locked * 100n) / totalForPercentage);
-  const pnlPct = totalUnrealizedPnl >= 0n
-    ? Number((totalUnrealizedPnl * 100n) / totalForPercentage)
-    : -Number((-totalUnrealizedPnl * 100n) / totalForPercentage);
-
   if (!walletAddress) {
     return (
       <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
@@ -86,16 +86,32 @@ export function AccountOverview() {
               {positions.length} open {positions.length === 1 ? "position" : "positions"}
             </p>
           </div>
-          <button
-            onClick={() => {
-              refreshCollateral();
-              refreshPositions();
-            }}
-            disabled={isLoading}
-            className="rounded-lg border border-border-low bg-card px-3 py-1.5 text-xs font-medium text-muted transition hover:-translate-y-0.5 hover:text-foreground hover:shadow-sm disabled:opacity-50"
-          >
-            {isLoading ? "Loading…" : "Refresh"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setDepositOpen(true)}
+              disabled={isLoading}
+              className="rounded-lg bg-foreground px-3 py-1.5 text-xs font-medium text-background transition hover:opacity-90 disabled:opacity-50"
+            >
+              Deposit
+            </button>
+            <button
+              onClick={() => setWithdrawOpen(true)}
+              disabled={isLoading || (availableCollateral ?? 0n) <= 0n}
+              className="rounded-lg border border-border-low bg-card px-3 py-1.5 text-xs font-medium text-muted transition hover:-translate-y-0.5 hover:text-foreground hover:shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Withdraw
+            </button>
+            <button
+              onClick={() => {
+                refreshCollateral();
+                refreshPositions();
+              }}
+              disabled={isLoading}
+              className="rounded-lg border border-border-low bg-card px-3 py-1.5 text-xs font-medium text-muted transition hover:-translate-y-0.5 hover:text-foreground hover:shadow-sm disabled:opacity-50"
+            >
+              {isLoading ? "Loading…" : "Refresh"}
+            </button>
+          </div>
         </div>
 
         {/* Total Equity */}
@@ -130,14 +146,6 @@ export function AccountOverview() {
                 )}
               </span>
             </div>
-            {totalEquity > 0n && !isLoading && (
-              <div className="h-1 w-full overflow-hidden rounded-full bg-gray-200">
-                <div
-                  className="h-full bg-green-500 transition-all"
-                  style={{ width: `${Math.max(0, Math.min(100, availablePct))}%` }}
-                />
-              </div>
-            )}
           </div>
 
           {/* Locked Collateral */}
@@ -155,14 +163,6 @@ export function AccountOverview() {
                 )}
               </span>
             </div>
-            {totalEquity > 0n && !isLoading && (
-              <div className="h-1 w-full overflow-hidden rounded-full bg-gray-200">
-                <div
-                  className="h-full bg-yellow-500 transition-all"
-                  style={{ width: `${Math.max(0, Math.min(100, lockedPct))}%` }}
-                />
-              </div>
-            )}
           </div>
 
           {/* Unrealized PnL */}
@@ -191,16 +191,6 @@ export function AccountOverview() {
                 )}
               </span>
             </div>
-            {totalEquity > 0n && !isLoading && (
-              <div className="h-1 w-full overflow-hidden rounded-full bg-gray-200">
-                <div
-                  className={`h-full transition-all ${
-                    totalUnrealizedPnl >= 0n ? "bg-blue-500" : "bg-red-500"
-                  }`}
-                  style={{ width: `${Math.max(0, Math.min(100, Math.abs(pnlPct)))}%` }}
-                />
-              </div>
-            )}
           </div>
         </div>
 
@@ -229,6 +219,29 @@ export function AccountOverview() {
         positions={positions} 
         onPnlUpdate={setTotalUnrealizedPnl}
       />
+      
+      {/* Deposit Dialog */}
+      {depositOpen && (
+        <DepositDialog
+          onClose={() => setDepositOpen(false)}
+          onSuccess={() => {
+            setDepositOpen(false);
+            setTimeout(() => refreshCollateral(), 1000);
+          }}
+        />
+      )}
+      
+      {/* Withdraw Dialog */}
+      {withdrawOpen && (
+        <WithdrawDialog
+          onClose={() => setWithdrawOpen(false)}
+          onSuccess={() => {
+            setWithdrawOpen(false);
+            setTimeout(() => refreshCollateral(), 1000);
+          }}
+          maxAmount={availableCollateral ?? 0n}
+        />
+      )}
     </div>
   );
 }
@@ -241,7 +254,7 @@ function PnLAggregator({
   positions, 
   onPnlUpdate 
 }: { 
-  positions: Array<any>;
+  positions: Array<{ perpsMarket: { toString: () => string } }>;
   onPnlUpdate: (total: bigint) => void;
 }) {
   const [pnlMap, setPnlMap] = useState<Map<string, bigint>>(new Map());
@@ -305,4 +318,234 @@ function SinglePositionPnL({
   }, [pnl, onPnlChange]);
   
   return null;
+}
+
+/**
+ * Dialog component for depositing collateral.
+ * @param onClose - Callback when dialog is closed
+ * @param onSuccess - Callback when deposit is successful
+ */
+function DepositDialog({
+  onClose,
+  onSuccess,
+}: {
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const { deposit, isLoading, error } = useDeposit();
+  const userTokenAccount = useTokenAccount(USDC_MINT_ADDRESS);
+  const { balance: walletBalance } = useTokenBalance(userTokenAccount);
+  const [amount, setAmount] = useState("");
+
+  /**
+   * Fires the deposit transaction and calls onSuccess if it lands.
+   */
+  const handleDeposit = async () => {
+    if (!amount || parseFloat(amount) <= 0 || !userTokenAccount) return;
+    const amountLamports = Math.floor(parseFloat(amount) * 10 ** USDC_DECIMALS);
+    const sig = await deposit(amountLamports, userTokenAccount);
+    if (sig) onSuccess();
+  };
+
+  /** Sets the input to the user's full wallet balance. */
+  const handleMax = () => {
+    if (walletBalance === null) return;
+    const maxAmount = Number(walletBalance) / 10 ** USDC_DECIMALS;
+    setAmount(maxAmount.toString());
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm space-y-4 rounded-2xl border border-border-low bg-card p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold">Deposit Collateral</h2>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-md p-1 text-muted transition hover:text-foreground"
+          >
+            ✕
+          </button>
+        </div>
+
+        <p className="text-sm text-muted">
+          Deposit USDC to use as collateral for perpetual futures trading.
+        </p>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-medium uppercase tracking-wide text-muted">
+              Amount (USDC)
+            </label>
+            <button
+              onClick={handleMax}
+              disabled={!walletBalance || walletBalance === 0n}
+              className="text-xs font-medium text-muted transition hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Max: {walletBalance !== null
+                ? `${(Number(walletBalance) / 10 ** USDC_DECIMALS).toLocaleString("en-US", { maximumFractionDigits: 2 })}`
+                : "—"} USDC
+            </button>
+          </div>
+          <input
+            type="number"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="0.00"
+            step="0.01"
+            min="0"
+            disabled={isLoading}
+            className="w-full rounded-xl border border-border-low bg-card px-4 py-3 text-lg font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-foreground/20 disabled:opacity-50"
+          />
+        </div>
+
+        {walletBalance !== null && (
+          <div className="rounded-lg bg-cream/30 px-3 py-2 text-xs text-muted">
+            <span>Wallet Balance: </span>
+            <span className="font-mono font-semibold text-foreground">
+              {(Number(walletBalance) / 10 ** USDC_DECIMALS).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC
+            </span>
+          </div>
+        )}
+
+        {error && (
+          <div className="rounded-lg border border-red-500/20 bg-red-50/50 px-3 py-2 text-xs text-red-600">
+            {error.message}
+          </div>
+        )}
+
+        <button
+          onClick={handleDeposit}
+          disabled={isLoading || !amount || parseFloat(amount) <= 0 || !userTokenAccount}
+          className="w-full rounded-xl bg-foreground px-4 py-2.5 text-sm font-semibold text-background transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isLoading ? "Depositing..." : "Deposit USDC"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Dialog component for withdrawing collateral.
+ * @param onClose - Callback when dialog is closed
+ * @param onSuccess - Callback when withdrawal is successful
+ * @param maxAmount - Maximum amount available to withdraw
+ */
+function WithdrawDialog({
+  onClose,
+  onSuccess,
+  maxAmount,
+}: {
+  onClose: () => void;
+  onSuccess: () => void;
+  maxAmount: bigint;
+}) {
+  const { withdraw, isLoading, error } = useWithdraw();
+  const userTokenAccount = useTokenAccount(USDC_MINT_ADDRESS);
+  const [amount, setAmount] = useState("");
+
+  /**
+   * Fires the withdraw transaction and calls onSuccess if it lands.
+   */
+  const handleWithdraw = async () => {
+    if (!amount || parseFloat(amount) <= 0 || !userTokenAccount) return;
+    const amountLamports = Math.floor(parseFloat(amount) * 10 ** USDC_DECIMALS);
+    const sig = await withdraw(amountLamports, userTokenAccount);
+    if (sig) onSuccess();
+  };
+
+  /** Sets the input to the maximum available collateral. */
+  const handleMax = () => {
+    const maxAmountNumber = Number(maxAmount) / 10 ** USDC_DECIMALS;
+    setAmount(maxAmountNumber.toString());
+  };
+
+  const maxAmountDisplay = Number(maxAmount) / 10 ** USDC_DECIMALS;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm space-y-4 rounded-2xl border border-border-low bg-card p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold">Withdraw Collateral</h2>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-md p-1 text-muted transition hover:text-foreground"
+          >
+            ✕
+          </button>
+        </div>
+
+        <p className="text-sm text-muted">
+          Withdraw USDC collateral from your trading account.
+        </p>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-medium uppercase tracking-wide text-muted">
+              Amount (USDC)
+            </label>
+            <button
+              onClick={handleMax}
+              disabled={maxAmount === 0n}
+              className="text-xs font-medium text-muted transition hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Max: {maxAmountDisplay.toLocaleString("en-US", { maximumFractionDigits: 2 })} USDC
+            </button>
+          </div>
+          <input
+            type="number"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="0.00"
+            step="0.01"
+            min="0"
+            max={maxAmountDisplay}
+            disabled={isLoading}
+            className="w-full rounded-xl border border-border-low bg-card px-4 py-3 text-lg font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-foreground/20 disabled:opacity-50"
+          />
+        </div>
+
+        <div className="rounded-lg bg-cream/30 px-3 py-2 text-xs text-muted">
+          <span>Available Collateral: </span>
+          <span className="font-mono font-semibold text-foreground">
+            {maxAmountDisplay.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC
+          </span>
+        </div>
+
+        {parseFloat(amount) > maxAmountDisplay && (
+          <div className="rounded-lg border border-yellow-500/20 bg-yellow-50/50 px-3 py-2 text-xs text-yellow-600">
+            Amount exceeds available collateral
+          </div>
+        )}
+
+        {error && (
+          <div className="rounded-lg border border-red-500/20 bg-red-50/50 px-3 py-2 text-xs text-red-600">
+            {error.message}
+          </div>
+        )}
+
+        <button
+          onClick={handleWithdraw}
+          disabled={isLoading || !amount || parseFloat(amount) <= 0 || parseFloat(amount) > maxAmountDisplay || !userTokenAccount}
+          className="w-full rounded-xl bg-foreground px-4 py-2.5 text-sm font-semibold text-background transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isLoading ? "Withdrawing..." : "Withdraw USDC"}
+        </button>
+      </div>
+    </div>
+  );
 }

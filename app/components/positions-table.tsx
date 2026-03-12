@@ -126,7 +126,7 @@ export function PositionsTable() {
           )}
         </div>
         <button
-          onClick={refresh}
+          onClick={() => refresh()}
           disabled={isLoading}
           className="rounded-lg border border-border-low bg-card px-3 py-1.5 text-xs font-medium text-muted transition hover:-translate-y-0.5 hover:text-foreground hover:shadow-sm disabled:opacity-50"
         >
@@ -152,7 +152,7 @@ export function PositionsTable() {
           <div className="rounded-xl border border-red-500/20 bg-red-50/50 px-4 py-3 text-sm">
             <p className="text-red-600">{error.message}</p>
             <button
-              onClick={refresh}
+              onClick={() => refresh()}
               className="mt-2 rounded-lg bg-foreground px-3 py-1.5 text-xs font-medium text-background transition hover:opacity-90"
             >
               Retry

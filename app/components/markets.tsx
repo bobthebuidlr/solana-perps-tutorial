@@ -5,13 +5,10 @@ import { useEffect, useState } from "react";
 import { type PerpsMarket } from "../generated/perps";
 import { PositionDirection } from "../generated/perps/types/positionDirection";
 import { useCollateral } from "../hooks/useCollateral";
-import { useDeposit } from "../hooks/useDeposit";
 import { useMarkets } from "../hooks/useMarkets";
 import { useOpenPosition } from "../hooks/useOpenPosition";
 import { useOraclePrices } from "../hooks/useOraclePrices";
-import { useTokenAccount } from "../hooks/useTokenAccount";
-import { useTokenBalance } from "../hooks/useTokenBalance";
-import { TOKEN_DECIMALS, USDC_DECIMALS, USDC_MINT_ADDRESS } from "../lib/constants";
+import { TOKEN_DECIMALS, USDC_DECIMALS } from "../lib/constants";
 import { fmt, formatUsdc, getSymbol, iconColorClass } from "../lib/format";
 
 /**
@@ -397,8 +394,7 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
   // No collateral deposited yet
   if (!hasCollateral) {
     return (
-      <>
-        <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
+      <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
         <div className="space-y-4 p-6">
           {market && (
             <MarketHeader
@@ -417,32 +413,17 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
                 Deposit USDC collateral before opening a position.
               </p>
             </div>
-            <button
-              onClick={() => setDepositOpen(true)}
-              className="w-full rounded-xl bg-foreground px-4 py-2.5 text-sm font-semibold text-background transition hover:opacity-90"
-            >
-              Deposit Collateral
-            </button>
+            <p className="text-xs text-center text-muted mt-2">
+              Use the Account Overview to deposit collateral and start trading.
+            </p>
           </div>
         </div>
-        </div>
-
-        {depositOpen && (
-          <DepositDialog
-            onClose={() => setDepositOpen(false)}
-            onSuccess={() => {
-              setDepositOpen(false);
-              setTimeout(() => refreshCollateral(), 1000);
-            }}
-          />
-        )}
-      </>
+      </div>
     );
   }
 
   return (
-    <>
-      <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
+    <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
       <div className="space-y-4 p-6">
         {/* Market header + available collateral */}
         <div className="flex items-center justify-between">
@@ -623,18 +604,7 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
           </div>
         )}
       </div>
-      </div>
-
-      {depositOpen && (
-        <DepositDialog
-          onClose={() => setDepositOpen(false)}
-          onSuccess={() => {
-            setDepositOpen(false);
-            setTimeout(() => refreshCollateral(), 1000);
-          }}
-        />
-      )}
-    </>
+    </div>
   );
 }
 
@@ -690,117 +660,3 @@ function SummaryRow({
   );
 }
 
-/**
- * Modal dialog for depositing USDC collateral.
- * @param onClose - Called when the dialog should be dismissed.
- * @param onSuccess - Called after a successful deposit transaction.
- */
-function DepositDialog({
-  onClose,
-  onSuccess,
-}: {
-  onClose: () => void;
-  onSuccess: () => void;
-}) {
-  const { deposit, isLoading, error } = useDeposit();
-  const userTokenAccount = useTokenAccount(USDC_MINT_ADDRESS);
-  const { balance: walletBalance } = useTokenBalance(userTokenAccount);
-  const [amount, setAmount] = useState("");
-
-  /**
-   * Fires the deposit transaction and calls onSuccess if it lands.
-   */
-  const handleDeposit = async () => {
-    if (!amount || parseFloat(amount) <= 0 || !userTokenAccount) return;
-    const amountLamports = Math.floor(parseFloat(amount) * 10 ** USDC_DECIMALS);
-    const sig = await deposit(amountLamports, userTokenAccount);
-    if (sig) onSuccess();
-  };
-
-  /** Sets the input to the user's full wallet balance. */
-  const handleMax = () => {
-    if (walletBalance === null) return;
-    const maxAmount = Number(walletBalance) / 10 ** USDC_DECIMALS;
-    setAmount(maxAmount.toString());
-  };
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-sm space-y-4 rounded-2xl border border-border-low bg-card p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold">Deposit Collateral</h2>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="rounded-md p-1 text-muted transition hover:text-foreground"
-          >
-            ✕
-          </button>
-        </div>
-
-        <p className="text-sm text-muted">
-          Deposit USDC to use as collateral for perpetual futures trading.
-        </p>
-
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-medium uppercase tracking-wide text-muted">
-              Amount (USDC)
-            </label>
-            <span className="text-xs text-muted">
-              Balance:{" "}
-              <span className="font-medium text-foreground">
-                {walletBalance !== null ? formatUsdc(walletBalance) : "—"} USDC
-              </span>
-            </span>
-          </div>
-          <div className="relative">
-            <input
-              type="number"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0.00"
-              step="0.01"
-              min="0"
-              disabled={isLoading}
-              className="w-full rounded-xl border border-border-low bg-cream/30 px-4 py-3 pr-24 text-lg font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-foreground/20 disabled:opacity-50"
-            />
-            <div className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1.5">
-              <button
-                type="button"
-                onClick={handleMax}
-                disabled={isLoading || walletBalance === null}
-                className="rounded-md bg-foreground/10 px-2 py-0.5 text-xs font-semibold text-foreground transition hover:bg-foreground/20 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                MAX
-              </button>
-              <span className="text-sm font-medium text-muted">USDC</span>
-            </div>
-          </div>
-        </div>
-
-        <button
-          onClick={handleDeposit}
-          disabled={
-            isLoading || !amount || parseFloat(amount) <= 0 || !userTokenAccount
-          }
-          className="w-full rounded-xl bg-foreground px-4 py-3 text-sm font-semibold text-background transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {isLoading
-            ? "Depositing…"
-            : !userTokenAccount
-              ? "Loading…"
-              : "Deposit"}
-        </button>
-
-        {error && <p className="text-xs text-red-500">{error.message}</p>}
-      </div>
-    </div>
-  );
-}
