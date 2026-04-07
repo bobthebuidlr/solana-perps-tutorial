@@ -58,6 +58,11 @@ export type ClosePositionInstruction<
   TAccountPosition extends string | AccountMeta<string> = string,
   TAccountMarkets extends string | AccountMeta<string> = string,
   TAccountOracle extends string | AccountMeta<string> = string,
+  TAccountUserCollateralTokenAccount extends string | AccountMeta<string> =
+    string,
+  TAccountVault extends string | AccountMeta<string> = string,
+  TAccountTokenProgram extends string | AccountMeta<string> =
+    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
@@ -78,6 +83,15 @@ export type ClosePositionInstruction<
       TAccountOracle extends string
         ? ReadonlyAccount<TAccountOracle>
         : TAccountOracle,
+      TAccountUserCollateralTokenAccount extends string
+        ? WritableAccount<TAccountUserCollateralTokenAccount>
+        : TAccountUserCollateralTokenAccount,
+      TAccountVault extends string
+        ? WritableAccount<TAccountVault>
+        : TAccountVault,
+      TAccountTokenProgram extends string
+        ? ReadonlyAccount<TAccountTokenProgram>
+        : TAccountTokenProgram,
       ...TRemainingAccounts,
     ]
   >;
@@ -122,6 +136,9 @@ export type ClosePositionAsyncInput<
   TAccountPosition extends string = string,
   TAccountMarkets extends string = string,
   TAccountOracle extends string = string,
+  TAccountUserCollateralTokenAccount extends string = string,
+  TAccountVault extends string = string,
+  TAccountTokenProgram extends string = string,
 > = {
   /** User closing the position */
   user: TransactionSigner<TAccountUser>;
@@ -132,6 +149,11 @@ export type ClosePositionAsyncInput<
   /** Markets account — updated to adjust OI */
   markets: Address<TAccountMarkets>;
   oracle: Address<TAccountOracle>;
+  /** Per-user collateral token account PDA */
+  userCollateralTokenAccount?: Address<TAccountUserCollateralTokenAccount>;
+  /** Vault (LP pool) token account */
+  vault?: Address<TAccountVault>;
+  tokenProgram?: Address<TAccountTokenProgram>;
   tokenMint: ClosePositionInstructionDataArgs["tokenMint"];
 };
 
@@ -141,6 +163,9 @@ export async function getClosePositionInstructionAsync<
   TAccountPosition extends string,
   TAccountMarkets extends string,
   TAccountOracle extends string,
+  TAccountUserCollateralTokenAccount extends string,
+  TAccountVault extends string,
+  TAccountTokenProgram extends string,
   TProgramAddress extends Address = typeof PERPS_PROGRAM_ADDRESS,
 >(
   input: ClosePositionAsyncInput<
@@ -148,7 +173,10 @@ export async function getClosePositionInstructionAsync<
     TAccountUserAccount,
     TAccountPosition,
     TAccountMarkets,
-    TAccountOracle
+    TAccountOracle,
+    TAccountUserCollateralTokenAccount,
+    TAccountVault,
+    TAccountTokenProgram
   >,
   config?: { programAddress?: TProgramAddress },
 ): Promise<
@@ -158,7 +186,10 @@ export async function getClosePositionInstructionAsync<
     TAccountUserAccount,
     TAccountPosition,
     TAccountMarkets,
-    TAccountOracle
+    TAccountOracle,
+    TAccountUserCollateralTokenAccount,
+    TAccountVault,
+    TAccountTokenProgram
   >
 > {
   // Program address.
@@ -171,6 +202,12 @@ export async function getClosePositionInstructionAsync<
     position: { value: input.position ?? null, isWritable: true },
     markets: { value: input.markets ?? null, isWritable: true },
     oracle: { value: input.oracle ?? null, isWritable: false },
+    userCollateralTokenAccount: {
+      value: input.userCollateralTokenAccount ?? null,
+      isWritable: true,
+    },
+    vault: { value: input.vault ?? null, isWritable: true },
+    tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -202,6 +239,32 @@ export async function getClosePositionInstructionAsync<
       ],
     });
   }
+  if (!accounts.userCollateralTokenAccount.value) {
+    accounts.userCollateralTokenAccount.value = await getProgramDerivedAddress({
+      programAddress,
+      seeds: [
+        getBytesEncoder().encode(
+          new Uint8Array([
+            117, 115, 101, 114, 95, 99, 111, 108, 108, 97, 116, 101, 114, 97,
+            108,
+          ]),
+        ),
+        getAddressEncoder().encode(expectAddress(accounts.user.value)),
+      ],
+    });
+  }
+  if (!accounts.vault.value) {
+    accounts.vault.value = await getProgramDerivedAddress({
+      programAddress,
+      seeds: [
+        getBytesEncoder().encode(new Uint8Array([118, 97, 117, 108, 116])),
+      ],
+    });
+  }
+  if (!accounts.tokenProgram.value) {
+    accounts.tokenProgram.value =
+      "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address<"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA">;
+  }
 
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
@@ -211,6 +274,9 @@ export async function getClosePositionInstructionAsync<
       getAccountMeta(accounts.position),
       getAccountMeta(accounts.markets),
       getAccountMeta(accounts.oracle),
+      getAccountMeta(accounts.userCollateralTokenAccount),
+      getAccountMeta(accounts.vault),
+      getAccountMeta(accounts.tokenProgram),
     ],
     data: getClosePositionInstructionDataEncoder().encode(
       args as ClosePositionInstructionDataArgs,
@@ -222,7 +288,10 @@ export async function getClosePositionInstructionAsync<
     TAccountUserAccount,
     TAccountPosition,
     TAccountMarkets,
-    TAccountOracle
+    TAccountOracle,
+    TAccountUserCollateralTokenAccount,
+    TAccountVault,
+    TAccountTokenProgram
   >);
 }
 
@@ -232,6 +301,9 @@ export type ClosePositionInput<
   TAccountPosition extends string = string,
   TAccountMarkets extends string = string,
   TAccountOracle extends string = string,
+  TAccountUserCollateralTokenAccount extends string = string,
+  TAccountVault extends string = string,
+  TAccountTokenProgram extends string = string,
 > = {
   /** User closing the position */
   user: TransactionSigner<TAccountUser>;
@@ -242,6 +314,11 @@ export type ClosePositionInput<
   /** Markets account — updated to adjust OI */
   markets: Address<TAccountMarkets>;
   oracle: Address<TAccountOracle>;
+  /** Per-user collateral token account PDA */
+  userCollateralTokenAccount: Address<TAccountUserCollateralTokenAccount>;
+  /** Vault (LP pool) token account */
+  vault: Address<TAccountVault>;
+  tokenProgram?: Address<TAccountTokenProgram>;
   tokenMint: ClosePositionInstructionDataArgs["tokenMint"];
 };
 
@@ -251,6 +328,9 @@ export function getClosePositionInstruction<
   TAccountPosition extends string,
   TAccountMarkets extends string,
   TAccountOracle extends string,
+  TAccountUserCollateralTokenAccount extends string,
+  TAccountVault extends string,
+  TAccountTokenProgram extends string,
   TProgramAddress extends Address = typeof PERPS_PROGRAM_ADDRESS,
 >(
   input: ClosePositionInput<
@@ -258,7 +338,10 @@ export function getClosePositionInstruction<
     TAccountUserAccount,
     TAccountPosition,
     TAccountMarkets,
-    TAccountOracle
+    TAccountOracle,
+    TAccountUserCollateralTokenAccount,
+    TAccountVault,
+    TAccountTokenProgram
   >,
   config?: { programAddress?: TProgramAddress },
 ): ClosePositionInstruction<
@@ -267,7 +350,10 @@ export function getClosePositionInstruction<
   TAccountUserAccount,
   TAccountPosition,
   TAccountMarkets,
-  TAccountOracle
+  TAccountOracle,
+  TAccountUserCollateralTokenAccount,
+  TAccountVault,
+  TAccountTokenProgram
 > {
   // Program address.
   const programAddress = config?.programAddress ?? PERPS_PROGRAM_ADDRESS;
@@ -279,6 +365,12 @@ export function getClosePositionInstruction<
     position: { value: input.position ?? null, isWritable: true },
     markets: { value: input.markets ?? null, isWritable: true },
     oracle: { value: input.oracle ?? null, isWritable: false },
+    userCollateralTokenAccount: {
+      value: input.userCollateralTokenAccount ?? null,
+      isWritable: true,
+    },
+    vault: { value: input.vault ?? null, isWritable: true },
+    tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -288,6 +380,12 @@ export function getClosePositionInstruction<
   // Original args.
   const args = { ...input };
 
+  // Resolve default values.
+  if (!accounts.tokenProgram.value) {
+    accounts.tokenProgram.value =
+      "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address<"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA">;
+  }
+
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
     accounts: [
@@ -296,6 +394,9 @@ export function getClosePositionInstruction<
       getAccountMeta(accounts.position),
       getAccountMeta(accounts.markets),
       getAccountMeta(accounts.oracle),
+      getAccountMeta(accounts.userCollateralTokenAccount),
+      getAccountMeta(accounts.vault),
+      getAccountMeta(accounts.tokenProgram),
     ],
     data: getClosePositionInstructionDataEncoder().encode(
       args as ClosePositionInstructionDataArgs,
@@ -307,7 +408,10 @@ export function getClosePositionInstruction<
     TAccountUserAccount,
     TAccountPosition,
     TAccountMarkets,
-    TAccountOracle
+    TAccountOracle,
+    TAccountUserCollateralTokenAccount,
+    TAccountVault,
+    TAccountTokenProgram
   >);
 }
 
@@ -326,6 +430,11 @@ export type ParsedClosePositionInstruction<
     /** Markets account — updated to adjust OI */
     markets: TAccountMetas[3];
     oracle: TAccountMetas[4];
+    /** Per-user collateral token account PDA */
+    userCollateralTokenAccount: TAccountMetas[5];
+    /** Vault (LP pool) token account */
+    vault: TAccountMetas[6];
+    tokenProgram: TAccountMetas[7];
   };
   data: ClosePositionInstructionData;
 };
@@ -338,7 +447,7 @@ export function parseClosePositionInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedClosePositionInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 5) {
+  if (instruction.accounts.length < 8) {
     // TODO: Coded error.
     throw new Error("Not enough accounts");
   }
@@ -356,6 +465,9 @@ export function parseClosePositionInstruction<
       position: getNextAccount(),
       markets: getNextAccount(),
       oracle: getNextAccount(),
+      userCollateralTokenAccount: getNextAccount(),
+      vault: getNextAccount(),
+      tokenProgram: getNextAccount(),
     },
     data: getClosePositionInstructionDataDecoder().decode(instruction.data),
   };

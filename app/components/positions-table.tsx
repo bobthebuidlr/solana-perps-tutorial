@@ -80,7 +80,7 @@ function formatAge(openedAt: bigint): string {
  */
 export function PositionsTable() {
   const { wallet } = useWalletConnection();
-  const { positions, isLoading, error, refresh } = usePositions();
+  const { positions, isLoading, error } = usePositions();
   const { markets } = useMarkets();
   const { prices: oraclePrices } = useOraclePrices();
 
@@ -125,13 +125,6 @@ export function PositionsTable() {
             </p>
           )}
         </div>
-        <button
-          onClick={() => refresh()}
-          disabled={isLoading}
-          className="rounded-lg border border-border-low bg-card px-3 py-1.5 text-xs font-medium text-muted transition hover:-translate-y-0.5 hover:text-foreground hover:shadow-sm disabled:opacity-50"
-        >
-          {isLoading ? "Loading…" : "Refresh"}
-        </button>
       </div>
 
       {/* Loading */}
@@ -151,12 +144,6 @@ export function PositionsTable() {
         <div className="px-6 py-4">
           <div className="rounded-xl border border-red-500/20 bg-red-50/50 px-4 py-3 text-sm">
             <p className="text-red-600">{error.message}</p>
-            <button
-              onClick={() => refresh()}
-              className="mt-2 rounded-lg bg-foreground px-3 py-1.5 text-xs font-medium text-background transition hover:opacity-90"
-            >
-              Retry
-            </button>
           </div>
         </div>
       )}
@@ -205,7 +192,6 @@ export function PositionsTable() {
                   currentPrice={lookupCurrentPrice(
                     position.perpsMarket.toString()
                   )}
-                  onClose={refresh}
                 />
               ))}
             </tbody>
@@ -221,18 +207,15 @@ export function PositionsTable() {
  * @param position - Decoded Position account data.
  * @param market - Matching PerpsMarket for name/icon lookup, or undefined.
  * @param currentPrice - Current oracle price in base units (u64), or null.
- * @param onClose - Callback invoked after a successful close to trigger a refresh.
  */
 function PositionRow({
   position,
   market,
   currentPrice,
-  onClose,
 }: {
   position: Position;
   market: PerpsMarket | undefined;
   currentPrice: bigint | null;
-  onClose: () => void;
 }) {
   const { closePosition, isLoading: isClosing } = useClosePosition();
   const { pnl, isLoading: isPnlLoading } = usePositionPnl(
@@ -345,11 +328,7 @@ function PositionRow({
       {/* Close position */}
       <td className="py-3.5 pl-4 pr-6 text-right">
         <button
-          onClick={() =>
-            closePosition(position.perpsMarket as Address).then((sig) => {
-              if (sig) onClose();
-            })
-          }
+          onClick={() => closePosition(position.perpsMarket as Address)}
           disabled={isClosing}
           className="rounded-lg border border-border-low bg-card px-3 py-1.5 text-xs font-medium text-muted transition hover:-translate-y-0.5 hover:text-foreground hover:shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >

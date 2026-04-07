@@ -16,7 +16,8 @@ import { fmt, formatUsdc, getSymbol, iconColorClass } from "../lib/format";
  * Automatically pre-selects the first market when loaded.
  */
 export function Markets() {
-  const { markets, isLoading, error, refresh } = useMarkets();
+  const { markets, isLoading, error, refresh: refetch } = useMarkets();
+  const refresh = () => refetch();
   const [selectedMarket, setSelectedMarket] = useState<PerpsMarket | null>(
     null
   );
@@ -72,7 +73,7 @@ export function Markets() {
   }
 
   return (
-    <>
+    <div className="grid grid-cols-[2fr_1fr] gap-4">
       <MarketsList
         markets={markets}
         isLoading={isLoading}
@@ -82,7 +83,7 @@ export function Markets() {
         onSelectMarket={setSelectedMarket}
       />
       <OrderForm market={selectedMarket} />
-    </>
+    </div>
   );
 }
 
@@ -297,7 +298,6 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
     collateral,
     lockedCollateral,
     isLoading: collateralLoading,
-    refresh: refreshCollateral,
   } = useCollateral();
   const {
     openPosition,
@@ -310,7 +310,6 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
     PositionDirection.Long
   );
   const [sizeInput, setSizeInput] = useState("");
-  const [txSuccess, setTxSuccess] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
 
   const walletAddress = wallet?.account.address;
@@ -335,7 +334,6 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
   const marketTokenMint = market?.tokenMint.toString();
   useEffect(() => {
     setSizeInput("");
-    setTxSuccess(false);
   }, [marketTokenMint]);
 
   /**
@@ -344,14 +342,11 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
   const handleOpenPosition = async () => {
     if (!market || !walletAddress || !sizeInput || parseFloat(sizeInput) <= 0)
       return;
-    setTxSuccess(false);
     // Convert token quantity to 6-decimal base units (e.g. 1.5 SOL → 1_500_000)
     const qtyBase = Math.floor(parseFloat(sizeInput) * 10 ** TOKEN_DECIMALS);
     const sig = await openPosition(market.tokenMint, direction, qtyBase);
     if (sig) {
-      setTxSuccess(true);
       setSizeInput("");
-      setTimeout(() => refreshCollateral(), 1000);
     }
   };
 
@@ -389,7 +384,9 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
       : 0n;
 
   const sizeValid =
-    parsedQty > 0 && oraclePrice !== null && collateralCost <= availableCollateral;
+    parsedQty > 0 &&
+    oraclePrice !== null &&
+    collateralCost <= availableCollateral;
 
   // No collateral deposited yet
   if (!hasCollateral) {
@@ -454,7 +451,11 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
             </span>
             {oraclePrice !== null && maxQtyDisplay > 0 && (
               <span className="ml-2">
-                · Max: {maxQtyDisplay.toLocaleString("en-US", { maximumFractionDigits: 6 })} {symbol}
+                · Max:{" "}
+                {maxQtyDisplay.toLocaleString("en-US", {
+                  maximumFractionDigits: 6,
+                })}{" "}
+                {symbol}
               </span>
             )}
           </div>
@@ -502,7 +503,8 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
               disabled={!oraclePrice || maxQtyDisplay <= 0}
               className="text-xs font-medium text-muted transition hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
             >
-              Max: {maxQtyDisplay > 0
+              Max:{" "}
+              {maxQtyDisplay > 0
                 ? `${maxQtyDisplay.toLocaleString("en-US", { maximumFractionDigits: 4 })} ${symbol}`
                 : "—"}
             </button>
@@ -522,9 +524,13 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
               {symbol || "—"}
             </span>
           </div>
-          {parsedQty > 0 && oraclePrice !== null && collateralCost > availableCollateral && (
-            <p className="text-xs text-red-500">Exceeds available collateral</p>
-          )}
+          {parsedQty > 0 &&
+            oraclePrice !== null &&
+            collateralCost > availableCollateral && (
+              <p className="text-xs text-red-500">
+                Exceeds available collateral
+              </p>
+            )}
           {!oraclePrice && market && (
             <p className="text-xs text-muted">Waiting for oracle price…</p>
           )}
@@ -592,12 +598,6 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
           + Deposit more collateral
         </button>
 
-        {txSuccess && (
-          <div className="rounded-lg border border-green-500/20 bg-green-50/50 p-3 text-sm text-green-600">
-            Position opened successfully!
-          </div>
-        )}
-
         {openError && (
           <div className="rounded-lg border border-red-500/20 bg-red-50/50 p-3 text-sm text-red-600">
             {openError.message}
@@ -659,4 +659,3 @@ function SummaryRow({
     </div>
   );
 }
-

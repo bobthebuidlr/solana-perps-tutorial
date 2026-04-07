@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use anchor_spl::token::TokenAccount;
 
 use crate::{
     constants::*, error::ErrorCode, update_funding_indices, Markets, Oracle, Position,
@@ -32,6 +33,13 @@ pub struct OpenPosition<'info> {
     pub markets: Account<'info, Markets>,
 
     pub oracle: Account<'info, Oracle>,
+
+    /// Per-user collateral token account PDA — read to check available balance
+    #[account(
+        seeds = [USER_COLLATERAL_SEED, user.key().as_ref()],
+        bump
+    )]
+    pub user_collateral_token_account: Account<'info, TokenAccount>,
 
     pub system_program: Program<'info, System>,
 }
@@ -73,7 +81,8 @@ pub fn handler(
         .checked_div(1_000_000u128)
         .ok_or(ErrorCode::ArithmeticOverflow)? as u64;
 
-    let available = user_account.available_collateral()?;
+    let token_balance = ctx.accounts.user_collateral_token_account.amount;
+    let available = user_account.available_collateral(token_balance)?;
     require!(
         available >= collateral_usdc,
         ErrorCode::InsufficientCollateral

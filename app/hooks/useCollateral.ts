@@ -1,95 +1,73 @@
 import { useSolanaClient, useWalletConnection } from "@solana/react-hooks";
-import { useCallback, useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { fetchUserAccount } from "../generated/perps/accounts/userAccount";
+import { deriveUserCollateralPda } from "../lib/pdas";
 import { useUserAccountPda } from "./usePdas";
 
+/**
+ * Fetches the connected wallet's available and locked collateral.
+ * Available collateral = collateral token account balance - locked collateral.
+ * Uses React Query for caching, deduplication, and 5-second auto-refresh.
+ *
+ * @returns collateral - Available collateral (token balance - locked), or null while loading.
+ * @returns lockedCollateral - Locked collateral amount, or null while loading.
+ * @returns isLoading - True while the initial fetch is in-flight.
+ * @returns error - Last fetch error, or null.
+ */
 export function useCollateral() {
   const client = useSolanaClient();
   const { wallet } = useWalletConnection();
 
-  const [collateral, setCollateral] = useState<bigint | null>(null);
-  const [lockedCollateral, setLockedCollateral] = useState<bigint | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-
   const walletAddress = wallet?.account.address;
   const userAccountAddress = useUserAccountPda(walletAddress);
 
-  // Fetch collateral data
-  const fetchCollateralData = useCallback(
-    async (silent = false) => {
-      console.log(
-        "user account address",
-        !userAccountAddress || !client?.runtime?.rpc
-      );
-      if (!userAccountAddress || !client?.runtime?.rpc) {
-        if (!walletAddress) {
-          setCollateral(null);
-          setLockedCollateral(null);
-          if (!silent) setIsLoading(false);
-        }
-        return;
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["collateral", walletAddress ?? "disconnected"],
+    queryFn: async () => {
+      if (!walletAddress || !userAccountAddress || !client?.runtime?.rpc) {
+        return { collateral: 0n, lockedCollateral: 0n };
       }
 
-      console.log(silent);
-
-      if (!silent) setIsLoading(true);
-      setError(null);
-
       try {
-        console.log("fetching user account");
+        // Fetch locked_collateral from user account
         const userAccount = await fetchUserAccount(
           client.runtime.rpc,
           userAccountAddress
         );
-
-        console.log("user account", userAccount.data);
-        // The collateral field is the TOTAL collateral
-        // Available = Total - Locked
-        const totalCollateral = userAccount.data.collateral;
         const locked = userAccount.data.lockedCollateral;
-        const available =
-          totalCollateral > locked ? totalCollateral - locked : 0n;
 
-        setCollateral(available); // Set to available, not total
-        setLockedCollateral(locked);
+        // Fetch actual token balance from the user's collateral token account
+        const collateralPda = await deriveUserCollateralPda(walletAddress);
+        const tokenBalanceResult = await client.runtime.rpc
+          .getTokenAccountBalance(collateralPda)
+          .send();
+        const tokenBalance = BigInt(tokenBalanceResult.value.amount);
+
+        console.log("collateral token account: ", collateralPda);
+
+        // Available = token balance - locked
+        const available = tokenBalance > locked ? tokenBalance - locked : 0n;
+
+        return { collateral: available, lockedCollateral: locked };
       } catch (err) {
-        console.error("Failed to fetch user collateral:", err);
         // If account doesn't exist yet, set to zero rather than error
         if (
           err instanceof Error &&
           err.message.includes("Account does not exist")
         ) {
-          setCollateral(BigInt(0));
-          setLockedCollateral(BigInt(0));
-        } else {
-          setError(
-            err instanceof Error
-              ? err
-              : new Error("Failed to fetch user collateral")
-          );
-          setCollateral(null);
-          setLockedCollateral(null);
+          return { collateral: 0n, lockedCollateral: 0n };
         }
-      } finally {
-        if (!silent) setIsLoading(false);
+        throw err;
       }
     },
-    [userAccountAddress, walletAddress, client]
-  );
-
-  // Auto-fetch when address is ready
-  useEffect(() => {
-    if (userAccountAddress && client?.runtime?.rpc) {
-      fetchCollateralData();
-    }
-  }, [userAccountAddress, client, fetchCollateralData]);
+    enabled: !!walletAddress && !!userAccountAddress && !!client?.runtime?.rpc,
+    refetchInterval: 5000,
+  });
 
   return {
-    collateral,
-    lockedCollateral,
+    collateral: data?.collateral ?? null,
+    lockedCollateral: data?.lockedCollateral ?? null,
     isLoading,
-    error,
-    refresh: fetchCollateralData,
+    error: error as Error | null,
   };
 }

@@ -61,10 +61,7 @@ pub struct UserAccount {
     /// User that owns this account
     pub authority: Pubkey,
 
-    /// Market this user is associated with
-    pub market: Pubkey,
-
-    pub collateral: u64,
+    /// Collateral locked in open positions
     pub locked_collateral: u64,
 
     // PDA bump seed
@@ -72,8 +69,11 @@ pub struct UserAccount {
 }
 
 impl UserAccount {
-    pub fn available_collateral(&self) -> Result<u64> {
-        self.collateral
+    /// Returns the available (unlocked) collateral.
+    /// @param token_balance - Current balance of the user's collateral token account.
+    /// @returns Available collateral amount.
+    pub fn available_collateral(&self, token_balance: u64) -> Result<u64> {
+        token_balance
             .checked_sub(self.locked_collateral)
             .ok_or(error!(ErrorCode::InvalidCollateralState))
     }

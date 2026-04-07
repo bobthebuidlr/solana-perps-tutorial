@@ -1,15 +1,17 @@
 import { type Address } from "@solana/kit";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSendTransaction, useWalletConnection } from "@solana/react-hooks";
 import { useCallback, useState } from "react";
 import { PERPS_PROGRAM_ADDRESS } from "../generated/perps";
 import { getOpenPositionInstructionDataEncoder } from "../generated/perps/instructions/openPosition";
 import { PositionDirection } from "../generated/perps/types/positionDirection";
 import { SYSTEM_PROGRAM_ADDRESS } from "../lib/constants";
-import { derivePositionPda } from "../lib/pdas";
+import { derivePositionPda, deriveUserCollateralPda } from "../lib/pdas";
 import { useMarketsPda, useOraclePda, useUserAccountPda } from "./usePdas";
 
 /**
  * Hook to open a perpetual futures position on-chain.
+ * Invalidates positions and collateral queries on success.
  *
  * @returns openPosition - Sends the open-position instruction.
  * @returns isLoading - True while the transaction is in-flight.
@@ -18,6 +20,7 @@ import { useMarketsPda, useOraclePda, useUserAccountPda } from "./usePdas";
 export function useOpenPosition() {
   const { send } = useSendTransaction();
   const { wallet } = useWalletConnection();
+  const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
@@ -49,8 +52,9 @@ export function useOpenPosition() {
       setError(null);
 
       try {
-        // Derive position PDA (unique per user + tokenMint)
+        // Derive position PDA and user collateral PDA
         const positionAddress = await derivePositionPda(walletAddress, tokenMint);
+        const userCollateralAddress = await deriveUserCollateralPda(walletAddress);
 
         const instruction = {
           programAddress: PERPS_PROGRAM_ADDRESS,
@@ -60,6 +64,7 @@ export function useOpenPosition() {
             { address: positionAddress, role: 1 },            // position (Writable)
             { address: marketsAddress, role: 1 },             // markets (Writable)
             { address: oracleAddress, role: 0 },              // oracle (Readonly)
+            { address: userCollateralAddress, role: 0 },      // userCollateralTokenAccount (Readonly)
             { address: SYSTEM_PROGRAM_ADDRESS, role: 0 },     // systemProgram (Readonly)
           ],
           data: getOpenPositionInstructionDataEncoder().encode({
@@ -73,6 +78,11 @@ export function useOpenPosition() {
           { instructions: [instruction] },
           { skipPreflight: true },
         );
+
+        // Invalidate related queries so UI updates everywhere
+        await queryClient.invalidateQueries({ queryKey: ["positions"] });
+        await queryClient.invalidateQueries({ queryKey: ["collateral"] });
+
         return signature;
       } catch (err) {
         console.error("❌ OpenPosition failed:", err);
@@ -83,7 +93,7 @@ export function useOpenPosition() {
         setIsLoading(false);
       }
     },
-    [send, walletAddress, wallet, userAccountAddress, marketsAddress, oracleAddress]
+    [send, walletAddress, wallet, userAccountAddress, marketsAddress, oracleAddress, queryClient]
   );
 
   return { openPosition, isLoading, error };

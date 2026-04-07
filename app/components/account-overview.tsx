@@ -13,6 +13,7 @@ import { useTokenBalance } from "../hooks/useTokenBalance";
 import { formatUsdc } from "../lib/format";
 import { USDC_DECIMALS, USDC_MINT_ADDRESS } from "../lib/constants";
 
+
 /**
  * Account overview component showing user's trading account status.
  * Displays available collateral, locked collateral, unrealized PnL, and total equity.
@@ -25,32 +26,11 @@ export function AccountOverview() {
     collateral,
     lockedCollateral,
     isLoading: collateralLoading,
-    refresh: refreshCollateral,
   } = useCollateral();
-  const { positions, isLoading: positionsLoading, refresh: refreshPositions } = usePositions();
-  
+  const { positions, isLoading: positionsLoading } = usePositions();
+
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
-  
-  // Auto-refresh positions every 5 seconds (silent refresh)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (walletAddress && refreshPositions) {
-        refreshPositions(true); // silent refresh
-      }
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [walletAddress, refreshPositions]);
-
-  // Auto-refresh collateral every 5 seconds (silent refresh)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (walletAddress && refreshCollateral) {
-        refreshCollateral(true); // silent refresh
-      }
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [walletAddress, refreshCollateral]);
 
   const availableCollateral = collateral ?? 0n;
   const locked = lockedCollateral ?? 0n;
@@ -100,16 +80,6 @@ export function AccountOverview() {
               className="rounded-lg border border-border-low bg-card px-3 py-1.5 text-xs font-medium text-muted transition hover:-translate-y-0.5 hover:text-foreground hover:shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Withdraw
-            </button>
-            <button
-              onClick={() => {
-                refreshCollateral();
-                refreshPositions();
-              }}
-              disabled={isLoading}
-              className="rounded-lg border border-border-low bg-card px-3 py-1.5 text-xs font-medium text-muted transition hover:-translate-y-0.5 hover:text-foreground hover:shadow-sm disabled:opacity-50"
-            >
-              {isLoading ? "Loading…" : "Refresh"}
             </button>
           </div>
         </div>
@@ -226,7 +196,6 @@ export function AccountOverview() {
           onClose={() => setDepositOpen(false)}
           onSuccess={() => {
             setDepositOpen(false);
-            setTimeout(() => refreshCollateral(), 1000);
           }}
         />
       )}
@@ -237,7 +206,6 @@ export function AccountOverview() {
           onClose={() => setWithdrawOpen(false)}
           onSuccess={() => {
             setWithdrawOpen(false);
-            setTimeout(() => refreshCollateral(), 1000);
           }}
           maxAmount={availableCollateral ?? 0n}
         />

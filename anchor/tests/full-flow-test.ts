@@ -1,6 +1,6 @@
 import * as anchor from "@anchor-lang/core";
 import { BN, Program } from "@anchor-lang/core";
-import { createAccount, createMint, mintTo } from "@solana/spl-token";
+import { createAccount, createMint, getAccount, mintTo } from "@solana/spl-token";
 import { PublicKey } from "@solana/web3.js";
 import { assert } from "chai";
 import { Perps } from "../target/types/perps";
@@ -36,6 +36,7 @@ describe("Full Flow Test", () => {
   let oraclePda: PublicKey;
   let vaultPda: PublicKey;
   let userAccountPda: PublicKey;
+  let userCollateralPda: PublicKey;
   let positionPda: PublicKey;
 
   before(async () => {
@@ -94,6 +95,11 @@ describe("Full Flow Test", () => {
       program.programId
     );
 
+    [userCollateralPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("user_collateral"), wallet.publicKey.toBuffer()],
+      program.programId
+    );
+
     [positionPda] = PublicKey.findProgramAddressSync(
       [
         Buffer.from("position"),
@@ -108,6 +114,7 @@ describe("Full Flow Test", () => {
     console.log("Oracle PDA:", oraclePda.toString());
     console.log("Vault PDA:", vaultPda.toString());
     console.log("User Account PDA:", userAccountPda.toString());
+    console.log("User Collateral PDA:", userCollateralPda.toString());
     console.log("Position PDA:", positionPda.toString());
   });
 
@@ -143,12 +150,7 @@ describe("Full Flow Test", () => {
           .initialize()
           .accounts({
             authority: wallet.publicKey,
-            // markets: marketsPda,
-            // oracle: oraclePda,
-            // vault: vaultPda,
             usdcMint: usdcMint,
-            // tokenProgram: TOKEN_PROGRAM_ID,
-            // systemProgram: SystemProgram.programId,
           })
           .rpc();
 
@@ -178,6 +180,33 @@ describe("Full Flow Test", () => {
         assert.isNotNull(vaultInfo, "Vault account should exist");
         console.log("✓ Vault token account created");
       }
+    });
+
+    it("should pre-fund the vault (LP pool) with USDC", async () => {
+      console.log("\n💰 Pre-funding vault (LP pool) with 5000 USDC...");
+
+      // Mint USDC directly to the vault so it can pay winning traders
+      await mintTo(
+        connection,
+        wallet.payer,
+        usdcMint,
+        vaultPda,
+        wallet.publicKey,
+        5_000_000_000 // 5,000 USDC
+      );
+
+      const vaultAccount = await getAccount(connection, vaultPda);
+      console.log(
+        "Vault balance:",
+        Number(vaultAccount.amount) / 1_000_000,
+        "USDC"
+      );
+      assert.equal(
+        vaultAccount.amount.toString(),
+        "5000000000",
+        "Vault should have 5000 USDC"
+      );
+      console.log("✓ Vault pre-funded");
     });
   });
 
@@ -234,54 +263,19 @@ describe("Full Flow Test", () => {
   });
 
   describe("Step 3: Deposit Collateral", () => {
-    it("should deposit USDC collateral and create UserAccount", async () => {
+    it("should deposit USDC collateral into user's collateral token account", async () => {
       console.log("\n🚀 Step 3: Depositing collateral...");
 
       // Check if user account already exists
-      let userAccountExists = false;
-      let existingCollateral = new BN(0);
       try {
         const existingUserAccount = await program.account.userAccount.fetch(
           userAccountPda
         );
-        userAccountExists = true;
-        existingCollateral = existingUserAccount.collateral;
         console.log(
-          "⚠️  User account already exists with",
-          existingCollateral.toNumber() / 1_000_000,
-          "USDC"
-        );
-        console.log(
-          "Skipping deposit (would require matching USDC mint from previous run)"
-        );
-
-        // Verify existing account
-        assert.equal(
-          existingUserAccount.authority.toString(),
-          wallet.publicKey.toString(),
-          "Authority should match wallet"
-        );
-
-        console.log("\nUser Account State:");
-        console.log(
-          "- Total collateral:",
-          existingUserAccount.collateral.toNumber() / 1_000_000,
-          "USDC"
-        );
-        console.log(
-          "- Locked collateral:",
-          existingUserAccount.lockedCollateral.toNumber() / 1_000_000,
-          "USDC"
-        );
-        console.log(
-          "- Available collateral:",
-          (existingUserAccount.collateral.toNumber() -
-            existingUserAccount.lockedCollateral.toNumber()) /
-            1_000_000,
-          "USDC"
+          "⚠️  User account already exists, skipping deposit"
         );
         console.log("✓ User account verified");
-        return; // Skip deposit
+        return;
       } catch (error) {
         console.log("User account doesn't exist, creating...");
       }
@@ -291,46 +285,47 @@ describe("Full Flow Test", () => {
         .accounts({
           user: wallet.publicKey,
           userTokenAccount: userTokenAccount,
-          vault: vaultPda,
+          userCollateralTokenAccount: userCollateralPda,
+          usdcMint: usdcMint,
         })
         .rpc();
 
       console.log("✅ Collateral deposited!");
       console.log("Transaction signature:", tx);
       console.log("Amount deposited: 1000 USDC");
-      console.log("User account PDA:", userAccountPda.toString());
 
       // Verify UserAccount was created
       const userAccount = await program.account.userAccount.fetch(
         userAccountPda
       );
       assert.equal(
-        userAccount.collateral.toString(),
-        DEPOSIT_AMOUNT.toString(),
-        "Collateral amount should match"
-      );
-      assert.equal(
         userAccount.authority.toString(),
         wallet.publicKey.toString(),
         "Authority should match wallet"
       );
+      assert.equal(
+        userAccount.lockedCollateral.toString(),
+        "0",
+        "Locked collateral should be 0"
+      );
+
+      // Verify tokens are in the user's collateral token account (not vault)
+      const collateralAccount = await getAccount(connection, userCollateralPda);
+      assert.equal(
+        collateralAccount.amount.toString(),
+        DEPOSIT_AMOUNT.toString(),
+        "User collateral token account should hold deposited USDC"
+      );
 
       console.log("\nUser Account State:");
       console.log(
-        "- Total collateral:",
-        userAccount.collateral.toNumber() / 1_000_000,
+        "- Token balance:",
+        Number(collateralAccount.amount) / 1_000_000,
         "USDC"
       );
       console.log(
         "- Locked collateral:",
         userAccount.lockedCollateral.toNumber() / 1_000_000,
-        "USDC"
-      );
-      console.log(
-        "- Available collateral:",
-        (userAccount.collateral.toNumber() -
-          userAccount.lockedCollateral.toNumber()) /
-          1_000_000,
         "USDC"
       );
       console.log("✓ User account verified");
@@ -358,11 +353,9 @@ describe("Full Flow Test", () => {
           .openPosition(SOL_MINT, direction, POSITION_SIZE)
           .accounts({
             user: wallet.publicKey,
-            // userAccount: userAccountPd a,
-            // position: positionPda,
             markets: marketsPda,
             oracle: oraclePda,
-            // systemProgram: SystemProgram.programId,
+            userCollateralTokenAccount: userCollateralPda,
           })
           .rpc();
 
@@ -417,13 +410,6 @@ describe("Full Flow Test", () => {
       console.log(
         "- Locked collateral:",
         userAccount.lockedCollateral.toNumber() / 1_000_000,
-        "USDC"
-      );
-      console.log(
-        "- Available collateral:",
-        (userAccount.collateral.toNumber() -
-          userAccount.lockedCollateral.toNumber()) /
-          1_000_000,
         "USDC"
       );
       console.log("✓ Position verified");
@@ -491,8 +477,6 @@ describe("Full Flow Test", () => {
       console.log("- Total PnL (raw):", positionInfo.pnlInfo.total.toString());
 
       // Expected price PnL = position_size * (current_price − entry_price) / 10^6
-      // position_size is token qty (6-decimal), prices are 6-decimal fixed point
-      // dividing by 10^6 gives USDC base units
       const expectedPricePnl = POSITION_SIZE.mul(
         PROFIT_PRICE.sub(position.entryPrice)
       ).div(new BN(1_000_000));
@@ -508,7 +492,6 @@ describe("Full Flow Test", () => {
         positionInfo.pnlInfo.price.gt(new BN(0)),
         "Price PnL should be positive when oracle price exceeds entry price"
       );
-      // Total PnL must be price PnL + funding PnL
       assert.equal(
         positionInfo.pnlInfo.total.toString(),
         positionInfo.pnlInfo.price.add(positionInfo.pnlInfo.funding).toString(),
@@ -555,8 +538,6 @@ describe("Full Flow Test", () => {
       );
       console.log("- Total PnL (raw):", positionInfo.pnlInfo.total.toString());
 
-      // Expected price PnL = position_size * (current_price − entry_price) / 10^6 — negative
-      // position_size is token qty (6-decimal), prices are 6-decimal fixed point
       const expectedPricePnl = POSITION_SIZE.mul(
         LOSS_PRICE.sub(position.entryPrice)
       ).div(new BN(1_000_000));
@@ -571,7 +552,6 @@ describe("Full Flow Test", () => {
         positionInfo.pnlInfo.price.isNeg(),
         "Price PnL should be negative when oracle price is below entry price"
       );
-      // Total PnL must be price PnL + funding PnL
       assert.equal(
         positionInfo.pnlInfo.total.toString(),
         positionInfo.pnlInfo.price.add(positionInfo.pnlInfo.funding).toString(),
@@ -587,19 +567,15 @@ describe("Full Flow Test", () => {
     // 1 SOL in 6-decimal token quantity
     const POSITION_SIZE_SMALL = new BN(1_000_000);
 
-    it("Step 6a: should close the 5-SOL LONG at a loss ($80) and deduct position.collateral from user account", async () => {
+    it("Step 6a: should close the 5-SOL LONG at a loss ($80) and transfer loss to vault", async () => {
       console.log(
         "\n🚀 Step 6a: Closing 5-SOL LONG at $80 (loss case, oracle already set)..."
       );
 
-      // Oracle is already at $80 from Step 5b — no update needed
-
       // Snapshot state before close
       const positionBefore = await program.account.position.fetch(positionPda);
-      const userAccountBefore = await program.account.userAccount.fetch(
-        userAccountPda
-      );
-      // Token account checks are no longer needed since PnL goes to collateral account
+      const collateralAccountBefore = await getAccount(connection, userCollateralPda);
+      const vaultAccountBefore = await getAccount(connection, vaultPda);
 
       console.log(
         "Position collateral:",
@@ -607,16 +583,17 @@ describe("Full Flow Test", () => {
         "USDC"
       );
       console.log(
-        "User account collateral before:",
-        userAccountBefore.collateral.toNumber() / 1_000_000,
+        "User collateral token balance before:",
+        Number(collateralAccountBefore.amount) / 1_000_000,
+        "USDC"
+      );
+      console.log(
+        "Vault balance before:",
+        Number(vaultAccountBefore.amount) / 1_000_000,
         "USDC"
       );
 
-      // Numbers:
-      // position.collateral = 5 SOL × $100 = 500 USDC = 500_000_000
-      // price_pnl = 5_000_000 × (80_000_000 − 100_000_000) / 1_000_000 = −100_000_000 (−100 USDC)
-      // user collateral before = 1000 USDC (or whatever it was)
-      // user collateral after = 1000 − 100 = 900 USDC
+      // Expected: price_pnl = 5_000_000 × (80_000_000 − 100_000_000) / 1_000_000 = −100_000_000 (−100 USDC)
       const oracleAccount = await program.account.oracle.fetch(oraclePda);
       const oraclePrice = oracleAccount.prices.find(
         (p) => p.tokenMint.toString() === SOL_MINT.toString()
@@ -624,7 +601,6 @@ describe("Full Flow Test", () => {
       const expectedPricePnl = positionBefore.positionSize
         .mul(oraclePrice.sub(positionBefore.entryPrice))
         .div(new BN(1_000_000));
-      // Settlement calculation no longer needed - PnL goes to collateral
 
       const tx = await program.methods
         .closePosition(SOL_MINT)
@@ -632,6 +608,8 @@ describe("Full Flow Test", () => {
           user: wallet.publicKey,
           markets: marketsPda,
           oracle: oraclePda,
+          userCollateralTokenAccount: userCollateralPda,
+          vault: vaultPda,
         })
         .rpc();
 
@@ -645,45 +623,40 @@ describe("Full Flow Test", () => {
         console.log("✓ Position PDA closed (account not found as expected)");
       }
 
-      // PnL is now added to user's collateral account instead of wallet
-      // No need to check token balance changes
+      // Verify actual token transfers — loss should move from user collateral to vault
+      const collateralAccountAfter = await getAccount(connection, userCollateralPda);
+      const vaultAccountAfter = await getAccount(connection, vaultPda);
+      const lossAmount = expectedPricePnl.abs();
 
-      // Assert user account: collateral reflects PnL
-      // Collateral = previous_collateral + PnL (floored at 0)
-      // Note: position_collateral is NOT subtracted, it's just unlocked from locked_collateral
+      console.log("Loss amount:", lossAmount.toNumber() / 1_000_000, "USDC");
+      console.log(
+        "User collateral token balance after:",
+        Number(collateralAccountAfter.amount) / 1_000_000,
+        "USDC"
+      );
+      console.log(
+        "Vault balance after:",
+        Number(vaultAccountAfter.amount) / 1_000_000,
+        "USDC"
+      );
+
+      // User collateral token account should decrease by loss amount
+      assert.equal(
+        (BigInt(collateralAccountBefore.amount) - collateralAccountAfter.amount).toString(),
+        lossAmount.toString(),
+        "User collateral token account should decrease by loss amount"
+      );
+
+      // Vault should increase by loss amount
+      assert.equal(
+        (vaultAccountAfter.amount - BigInt(vaultAccountBefore.amount)).toString(),
+        lossAmount.toString(),
+        "Vault should increase by loss amount"
+      );
+
+      // Assert locked_collateral is 0
       const userAccountAfter = await program.account.userAccount.fetch(
         userAccountPda
-      );
-      
-      const expectedFinalCollateral = (() => {
-        if (expectedPricePnl.gte(new BN(0))) {
-          return userAccountBefore.collateral.add(expectedPricePnl);
-        } else {
-          const loss = expectedPricePnl.abs();
-          return loss.gt(userAccountBefore.collateral) ? new BN(0) : userAccountBefore.collateral.sub(loss);
-        }
-      })();
-      
-      console.log(
-        "Expected PnL:",
-        expectedPricePnl.toNumber() / 1_000_000,
-        "USDC"
-      );
-      console.log(
-        "User collateral after close:",
-        userAccountAfter.collateral.toNumber() / 1_000_000,
-        "USDC"
-      );
-      console.log(
-        "Expected final collateral:",
-        expectedFinalCollateral.toNumber() / 1_000_000,
-        "USDC"
-      );
-      
-      assert.equal(
-        userAccountAfter.collateral.toString(),
-        expectedFinalCollateral.toString(),
-        "collateral should reflect position PnL"
       );
       assert.equal(
         userAccountAfter.lockedCollateral.toString(),
@@ -705,7 +678,7 @@ describe("Full Flow Test", () => {
       console.log("✓ All Step 6a (loss close) assertions passed");
     });
 
-    it("Step 6b: should close a winning 1-SOL LONG ($80→$110) and deduct position.collateral from user account", async () => {
+    it("Step 6b: should close a winning 1-SOL LONG ($80→$110) and transfer profit from vault", async () => {
       console.log(
         "\n🚀 Step 6b: Opening 1-SOL LONG at $80 then closing at $110 (win case)..."
       );
@@ -717,6 +690,7 @@ describe("Full Flow Test", () => {
           user: wallet.publicKey,
           markets: marketsPda,
           oracle: oraclePda,
+          userCollateralTokenAccount: userCollateralPda,
         })
         .rpc();
       console.log("Opened 1-SOL LONG at $80. TX:", openTx);
@@ -730,10 +704,8 @@ describe("Full Flow Test", () => {
 
       // Snapshot state before close
       const positionBefore = await program.account.position.fetch(positionPda);
-      const userAccountBefore = await program.account.userAccount.fetch(
-        userAccountPda
-      );
-      // Token account checks are no longer needed since PnL goes to collateral account
+      const collateralAccountBefore = await getAccount(connection, userCollateralPda);
+      const vaultAccountBefore = await getAccount(connection, vaultPda);
 
       console.log(
         "Position collateral:",
@@ -741,20 +713,20 @@ describe("Full Flow Test", () => {
         "USDC"
       );
       console.log(
-        "User account collateral before:",
-        userAccountBefore.collateral.toNumber() / 1_000_000,
+        "User collateral token balance before:",
+        Number(collateralAccountBefore.amount) / 1_000_000,
+        "USDC"
+      );
+      console.log(
+        "Vault balance before:",
+        Number(vaultAccountBefore.amount) / 1_000_000,
         "USDC"
       );
 
-      // Numbers:
-      // position.collateral = 1 SOL × $80 = 80 USDC = 80_000_000
-      // price_pnl = 1_000_000 × (110_000_000 − 80_000_000) / 1_000_000 = +30_000_000 (+30 USDC)
-      // user collateral before = whatever it was after Step 6a
-      // user collateral after = previous + 30 USDC
+      // Expected: price_pnl = 1_000_000 × (110_000_000 − 80_000_000) / 1_000_000 = +30_000_000 (+30 USDC)
       const expectedPricePnl = positionBefore.positionSize
         .mul(CLOSE_PRICE_WIN.sub(positionBefore.entryPrice))
         .div(new BN(1_000_000));
-      // Settlement calculation no longer needed - PnL goes to collateral
 
       const tx = await program.methods
         .closePosition(SOL_MINT)
@@ -762,6 +734,8 @@ describe("Full Flow Test", () => {
           user: wallet.publicKey,
           markets: marketsPda,
           oracle: oraclePda,
+          userCollateralTokenAccount: userCollateralPda,
+          vault: vaultPda,
         })
         .rpc();
 
@@ -775,39 +749,39 @@ describe("Full Flow Test", () => {
         console.log("✓ Position PDA closed (account not found as expected)");
       }
 
-      // PnL is now added to user's collateral account instead of wallet
-      // No need to check token balance changes
+      // Verify actual token transfers — profit should move from vault to user collateral
+      const collateralAccountAfter = await getAccount(connection, userCollateralPda);
+      const vaultAccountAfter = await getAccount(connection, vaultPda);
 
-      // Assert user account: collateral reflects PnL
-      // Collateral = previous_collateral + PnL
-      // Note: position_collateral is NOT subtracted, it's just unlocked from locked_collateral
+      console.log("Profit amount:", expectedPricePnl.toNumber() / 1_000_000, "USDC");
+      console.log(
+        "User collateral token balance after:",
+        Number(collateralAccountAfter.amount) / 1_000_000,
+        "USDC"
+      );
+      console.log(
+        "Vault balance after:",
+        Number(vaultAccountAfter.amount) / 1_000_000,
+        "USDC"
+      );
+
+      // User collateral token account should increase by profit amount
+      assert.equal(
+        (collateralAccountAfter.amount - BigInt(collateralAccountBefore.amount)).toString(),
+        expectedPricePnl.toString(),
+        "User collateral token account should increase by profit amount"
+      );
+
+      // Vault should decrease by profit amount
+      assert.equal(
+        (BigInt(vaultAccountBefore.amount) - vaultAccountAfter.amount).toString(),
+        expectedPricePnl.toString(),
+        "Vault should decrease by profit amount"
+      );
+
+      // Assert locked_collateral is 0
       const userAccountAfter = await program.account.userAccount.fetch(
         userAccountPda
-      );
-      
-      const expectedFinalCollateral = userAccountBefore.collateral
-        .add(expectedPricePnl);
-      
-      console.log(
-        "Expected PnL:",
-        expectedPricePnl.toNumber() / 1_000_000,
-        "USDC"
-      );
-      console.log(
-        "User collateral after close:",
-        userAccountAfter.collateral.toNumber() / 1_000_000,
-        "USDC"
-      );
-      console.log(
-        "Expected final collateral:",
-        expectedFinalCollateral.toNumber() / 1_000_000,
-        "USDC"
-      );
-      
-      assert.equal(
-        userAccountAfter.collateral.toString(),
-        expectedFinalCollateral.toString(),
-        "collateral should include profit from closed position"
       );
       assert.equal(
         userAccountAfter.lockedCollateral.toString(),
@@ -831,33 +805,30 @@ describe("Full Flow Test", () => {
   });
 
   describe("Step 7: Withdraw Collateral", () => {
-    it("should withdraw all available collateral to user wallet", async () => {
+    it("should withdraw all available collateral from user's collateral token account", async () => {
       console.log("\n🚀 Step 7: Withdrawing remaining collateral...");
 
-      const userAccountBefore = await program.account.userAccount.fetch(
-        userAccountPda
-      );
-      const available = userAccountBefore.collateral.sub(
-        userAccountBefore.lockedCollateral
-      );
+      // Available = token balance - locked
+      const collateralAccount = await getAccount(connection, userCollateralPda);
+      const userAccount = await program.account.userAccount.fetch(userAccountPda);
+      const available = BigInt(collateralAccount.amount.toString()) - BigInt(userAccount.lockedCollateral.toString());
 
       console.log(
         "Available to withdraw:",
-        available.toNumber() / 1_000_000,
+        Number(available) / 1_000_000,
         "USDC"
       );
 
       // Snapshot token balance before withdrawal
-      const { getAccount } = await import("@solana/spl-token");
       const tokenAccountBefore = await getAccount(connection, userTokenAccount);
-      const balanceBefore = new BN(tokenAccountBefore.amount.toString());
+      const balanceBefore = tokenAccountBefore.amount;
 
       const tx = await program.methods
-        .withdrawCollateral(available)
+        .withdrawCollateral(new BN(available.toString()))
         .accounts({
           user: wallet.publicKey,
           userAccount: userAccountPda,
-          vault: vaultPda,
+          userCollateralTokenAccount: userCollateralPda,
           userTokenAccount: userTokenAccount,
         })
         .rpc();
@@ -866,8 +837,7 @@ describe("Full Flow Test", () => {
 
       // Assert user token balance increased by available amount
       const tokenAccountAfter = await getAccount(connection, userTokenAccount);
-      const balanceAfter = new BN(tokenAccountAfter.amount.toString());
-      const received = balanceAfter.sub(balanceBefore);
+      const received = tokenAccountAfter.amount - balanceBefore;
 
       assert.equal(
         received.toString(),
@@ -875,14 +845,12 @@ describe("Full Flow Test", () => {
         "User should receive all available collateral"
       );
 
-      // Assert user account collateral is 0
-      const userAccountAfter = await program.account.userAccount.fetch(
-        userAccountPda
-      );
+      // Assert user collateral token account is now empty
+      const collateralAccountAfter = await getAccount(connection, userCollateralPda);
       assert.equal(
-        userAccountAfter.collateral.toString(),
+        collateralAccountAfter.amount.toString(),
         "0",
-        "user_account.collateral should be 0 after full withdrawal"
+        "User collateral token account should be empty after full withdrawal"
       );
 
       console.log("✓ All withdraw collateral assertions passed");
@@ -906,27 +874,34 @@ describe("Full Flow Test", () => {
         userAccountPda
       );
       console.log(
-        "✓ User total collateral:",
-        userAccount.collateral.toNumber() / 1_000_000,
-        "USDC"
-      );
-      console.log(
         "✓ User locked collateral:",
         userAccount.lockedCollateral.toNumber() / 1_000_000,
         "USDC"
       );
-      // Check Position — may have been closed in Step 6
+
+      // Check user collateral token account
+      const collateralAccount = await getAccount(connection, userCollateralPda);
+      console.log(
+        "✓ User collateral token balance:",
+        Number(collateralAccount.amount) / 1_000_000,
+        "USDC"
+      );
+
+      // Check vault (LP pool)
+      const vaultAccount = await getAccount(connection, vaultPda);
+      console.log(
+        "✓ Vault (LP pool) balance:",
+        Number(vaultAccount.amount) / 1_000_000,
+        "USDC"
+      );
+
+      // Check Position — should be closed after Step 6
       try {
         const position = await program.account.position.fetch(positionPda);
         console.log(
           "✓ Position size:",
           position.positionSize.toNumber() / 1_000_000,
           "SOL (token quantity)"
-        );
-        console.log(
-          "✓ Position entry price:",
-          position.entryPrice.toNumber() / 1_000_000,
-          "USD"
         );
       } catch {
         console.log("✓ Position PDA already closed (expected after Step 6)");

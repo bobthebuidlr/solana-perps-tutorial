@@ -17,13 +17,13 @@ pub struct WithdrawCollateral<'info> {
     )]
     pub user_account: Account<'info, UserAccount>,
 
-    /// Vault PDA that holds all user USDC — signs outbound transfers
+    /// Per-user collateral token account PDA — signs outbound transfers
     #[account(
         mut,
-        seeds = [VAULT_SEED],
+        seeds = [USER_COLLATERAL_SEED, user.key().as_ref()],
         bump
     )]
-    pub vault: Account<'info, TokenAccount>,
+    pub user_collateral_token_account: Account<'info, TokenAccount>,
 
     /// User's USDC token account to receive the withdrawn collateral
     #[account(
@@ -35,27 +35,36 @@ pub struct WithdrawCollateral<'info> {
     pub token_program: Program<'info, Token>,
 }
 
-/// Withdraws the specified amount of available (unlocked) collateral from the vault to the user's token account.
+/// Withdraws the specified amount of available (unlocked) collateral from the user's collateral token account to the user's wallet.
 /// @param ctx - Accounts context.
 /// @param amount - Amount of USDC (6-decimal) to withdraw.
 /// @returns Ok(()) on success.
 pub fn handler(ctx: Context<WithdrawCollateral>, amount: u64) -> Result<()> {
     require!(amount > 0, ErrorCode::InvalidAmount);
 
-    let user_account = &mut ctx.accounts.user_account;
+    let user_account = &ctx.accounts.user_account;
+    let token_balance = ctx.accounts.user_collateral_token_account.amount;
 
-    let available = user_account.available_collateral()?;
+    let available = user_account.available_collateral(token_balance)?;
     require!(available >= amount, ErrorCode::InsufficientCollateral);
 
-    // CPI: vault PDA signs the transfer to user_token_account
-    let vault_bump = ctx.bumps.vault;
-    let vault_seeds: &[&[u8]] = &[VAULT_SEED, &[vault_bump]];
-    let signer_seeds = &[vault_seeds];
+    // CPI: user collateral PDA signs the transfer to user_token_account
+    let collateral_bump = ctx.bumps.user_collateral_token_account;
+    let user_key = ctx.accounts.user.key();
+    let collateral_seeds: &[&[u8]] =
+        &[USER_COLLATERAL_SEED, user_key.as_ref(), &[collateral_bump]];
+    let signer_seeds = &[collateral_seeds];
 
     let cpi_accounts = Transfer {
-        from: ctx.accounts.vault.to_account_info(),
+        from: ctx
+            .accounts
+            .user_collateral_token_account
+            .to_account_info(),
         to: ctx.accounts.user_token_account.to_account_info(),
-        authority: ctx.accounts.vault.to_account_info(),
+        authority: ctx
+            .accounts
+            .user_collateral_token_account
+            .to_account_info(),
     };
     let cpi_ctx = CpiContext::new_with_signer(
         ctx.accounts.token_program.key(),
@@ -63,12 +72,6 @@ pub fn handler(ctx: Context<WithdrawCollateral>, amount: u64) -> Result<()> {
         signer_seeds,
     );
     token::transfer(cpi_ctx, amount)?;
-
-    // Deduct withdrawn amount from user's recorded collateral
-    user_account.collateral = user_account
-        .collateral
-        .checked_sub(amount)
-        .ok_or(ErrorCode::ArithmeticOverflow)?;
 
     msg!("Withdrew {} USDC (6-decimal) to user", amount);
 

@@ -21,6 +21,9 @@ pub const POSITION_SEED: &[u8] = b"position";
 #[constant]
 pub const VAULT_SEED: &[u8] = b"vault";
 
+#[constant]
+pub const USER_COLLATERAL_SEED: &[u8] = b"user_collateral";
+
 pub const ANCHOR_DISCRIMINATOR: usize = 8;
 
 pub const MAX_MARKETS: usize = 10;

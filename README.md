@@ -54,28 +54,72 @@ perps-dex/
 ## The Trading Lifecycle
 
 ```
-1. Deposit Collateral  →  USDC transferred from wallet to vault PDA
+1. Deposit Collateral  →  USDC transferred from wallet to per-user collateral token account (PDA)
 2. Open Position        →  Lock collateral, create Position account, update open interest
 3. Monitor PnL          →  View-only instruction returns price PnL + funding PnL
-4. Close Position       →  Settle PnL to collateral, unlock collateral, close Position account
-5. Withdraw Collateral  →  Transfer USDC from vault back to wallet
+4. Close Position       →  Settle PnL with actual token transfers, unlock collateral, close Position account
+5. Withdraw Collateral  →  Transfer USDC from user's collateral token account back to wallet
 ```
 
 **Decimal convention:** All amounts use 6-decimal fixed point — `1_000_000` = 1.00 USDC = 1.00 token unit. This matches USDC's native precision and keeps all math consistent.
 
 **One position per market:** Position PDAs are seeded with `["position", user_pubkey, token_mint]`, which means a user can only hold one open position per market. To switch direction, close first.
 
+### Fund Flow
+
+The protocol separates **user collateral** from the **LP vault** to create a clear counterparty relationship:
+
+```
+                    ┌──────────────────────┐
+   Deposit          │  User Collateral     │
+   Wallet ────────► │  Token Account (PDA) │ ◄──── Withdraw
+                    │  ["user_collateral", │       back to wallet
+                    │   wallet]            │
+                    └──────────┬───────────┘
+                               │
+                  Close Position (PnL settlement)
+                               │
+              Loss ────────────┼────────────── Win
+              tokens flow      │         tokens flow
+              to vault         │         from vault
+                               │
+                    ┌──────────▼───────────┐
+                    │  Vault / LP Pool     │
+                    │  Token Account (PDA) │
+                    │  ["vault"]           │
+                    │                      │
+                    │  Pre-funded by the   │
+                    │  protocol            │
+                    └──────────────────────┘
+```
+
+- **User collateral account**: Each user gets their own PDA token account (`["user_collateral", wallet]`). Deposits go here, withdrawals come from here. The program controls transfers via PDA signing.
+- **Vault (LP pool)**: A shared token account (`["vault"]`) that acts as the counterparty to all traders. When a trader loses, the loss amount is transferred from their collateral account to the vault. When a trader wins, the profit is paid from the vault to their collateral account.
+- **No token movement on open/close of position itself**: Collateral is only "locked" in accounting when a position opens. Actual token transfers only happen for PnL settlement on close.
+
+### Design Decisions
+
+**Why per-user PDA token accounts instead of one shared vault?**
+If all user deposits go into one vault, a winning trader withdraws profits that came from other users' deposits — there's no counterparty. By separating user collateral from the LP vault, profits/losses flow explicitly between traders and the LP pool, making the fund flow auditable and correct.
+
+**Why not store a `collateral` balance in `UserAccount`?**
+The user's collateral token account already holds the actual USDC balance. Duplicating it in a `collateral` field means two sources of truth that must stay in sync. Instead, `UserAccount` only stores `locked_collateral` (a counter that can't be derived from the token account alone), and available collateral is computed as `token_account.amount - locked_collateral`.
+
+**Why PDA token accounts instead of Associated Token Accounts (ATAs)?**
+ATAs are owned by the user's wallet — the program can't sign transfers out of them. PDA token accounts with self-authority (`token::authority = user_collateral_token_account`) let the program sign CPI transfers using PDA seeds, which is essential for the settlement flow where the program must move tokens without the user explicitly signing each transfer.
+
 ## Program Deep Dive
 
 ### Accounts
 
-| Account       | PDA Seeds                          | What It Stores                                          |
-| ------------- | ---------------------------------- | ------------------------------------------------------- |
-| `Markets`     | `["markets"]`                      | Vec of PerpsMarket (token, name, OI, funding indices)   |
-| `Oracle`      | `["oracle"]`                       | Vec of OraclePrice (token, price, timestamp)            |
-| `UserAccount` | `["user", wallet]`                 | Total collateral, locked collateral                     |
-| `Position`    | `["position", wallet, token_mint]` | Direction, entry price, size, collateral, funding index |
-| `Vault`       | `["vault"]`                        | Token account holding all deposited USDC                |
+| Account          | PDA Seeds                              | What It Stores                                          |
+| ---------------- | -------------------------------------- | ------------------------------------------------------- |
+| `Markets`        | `["markets"]`                          | Vec of PerpsMarket (token, name, OI, funding indices)   |
+| `Oracle`         | `["oracle"]`                           | Vec of OraclePrice (token, price, timestamp)            |
+| `UserAccount`    | `["user", wallet]`                     | Authority, locked collateral (balance read from token account) |
+| `UserCollateral` | `["user_collateral", wallet]`          | Per-user token account holding deposited USDC           |
+| `Position`       | `["position", wallet, token_mint]`     | Direction, entry price, size, collateral, funding index |
+| `Vault`          | `["vault"]`                            | LP pool token account (protocol-funded counterparty)    |
 
 `Markets` and `Oracle` are singleton accounts — one of each for the entire program. This simplifies PDA derivation (no dynamic seeds) and keeps all market data in one place for easy iteration. The tradeoff is a size limit (`MAX_MARKETS = 10`), which is fine for a tutorial.
 
@@ -85,11 +129,11 @@ perps-dex/
 | --------------- | ------------------------------- | ------------------------------------------------- |
 | **Setup**       | `initialize`                    | Create Markets, Oracle, and Vault PDAs            |
 |                 | `initialize_market_with_oracle` | Add a new perps market with initial oracle price  |
-| **Trading**     | `deposit_collateral`            | Transfer USDC from wallet to vault                |
-|                 | `open_position`                 | Lock collateral, create Position PDA, update OI   |
-|                 | `view_position_pnl`             | Read-only: returns price PnL + funding PnL        |
-|                 | `close_position`                | Settle PnL, unlock collateral, close Position PDA |
-|                 | `withdraw_collateral`           | Transfer available USDC from vault to wallet      |
+| **Trading**     | `deposit_collateral`            | Transfer USDC from wallet to user's collateral account |
+|                 | `open_position`                 | Lock collateral, create Position PDA, update OI        |
+|                 | `view_position_pnl`             | Read-only: returns price PnL + funding PnL             |
+|                 | `close_position`                | Settle PnL (token transfers), unlock collateral, close Position PDA |
+|                 | `withdraw_collateral`           | Transfer available USDC from collateral account to wallet |
 | **Maintenance** | `update_funding`                | Update cumulative funding indices                 |
 |                 | `update_oracle`                 | Update oracle price for a token                   |
 
@@ -121,7 +165,7 @@ Long:  -(index_diff * collateral / FUNDING_RATE_BASE)   // longs pay when index 
 Short:  (index_diff * collateral / FUNDING_RATE_BASE)    // shorts receive
 ```
 
-**Total PnL** = price PnL + funding PnL, settled to `UserAccount.collateral` when the position is closed.
+**Total PnL** = price PnL + funding PnL. When a position is closed, actual token transfers settle the PnL: losses move from the user's collateral token account to the vault (LP pool), and profits move from the vault to the user's collateral token account.
 
 ## Frontend
 
@@ -156,7 +200,7 @@ Regenerate after program changes: `npm run setup` (or `npm run anchor-build && n
 | `usePositionPnl`   | Fetch real-time PnL via transaction simulation |
 | `usePdas`          | Derive all program PDA addresses client-side   |
 
-PDA derivation on the client (in `app/lib/pdas.ts`) must use the same seeds as the program — `["position", wallet_bytes, token_mint_bytes]` etc. The `usePdas` hook wraps this for convenience.
+PDA derivation on the client (in `app/lib/pdas.ts`) must use the same seeds as the program — `["position", wallet_bytes, token_mint_bytes]`, `["user_collateral", wallet_bytes]`, etc. The `usePdas` hook wraps this for convenience.
 
 ## Getting Started
 
@@ -234,6 +278,8 @@ npm run anchor-test
 ```
 
 Tests use [LiteSVM](https://github.com/LiteSVM/litesvm) — a fast in-process Solana VM that doesn't need a running validator. The integration test in `anchor/tests/full-flow-test.ts` covers the full trading lifecycle: initialize, deposit, open position, check PnL at different prices, close at profit/loss, and withdraw.
+
+**Important:** Stop any running Surfpool or `solana-test-validator` before running tests. `anchor test` starts its own clean validator — if another validator is already on port 8899, the tests will connect to it instead and fail due to stale state (e.g., vault initialized with a different USDC mint from a previous session).
 
 ## Scripts
 

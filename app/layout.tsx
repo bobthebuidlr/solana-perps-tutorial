@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Inter } from "next/font/google";
-import { Markets, MarketsList, OrderForm } from "./components/markets";
-import { PositionsTable } from "./components/positions-table";
 import { AccountOverview } from "./components/account-overview";
+import { Markets } from "./components/markets";
+import { PositionsTable } from "./components/positions-table";
 import { Providers } from "./components/providers";
 import { WalletConnectButton } from "./components/wallet-connect-button";
 import "./globals.css";
@@ -46,10 +46,10 @@ export default function RootLayout({
               <WalletConnectButton />
             </nav>
           </div>
-          <div className="grid grid-cols-2 gap-4 p-4">
-            {/* Top row: Markets list and Order form */}
-            <Markets />
-            {/* Bottom row: Positions table and Account overview */}
+          <div className="grid grid-cols-[2fr_1fr] gap-4 p-4">
+            <div className="col-span-2">
+              <Markets />
+            </div>
             <PositionsTable />
             <AccountOverview />
           </div>

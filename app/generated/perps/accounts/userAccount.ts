@@ -53,9 +53,7 @@ export type UserAccount = {
   discriminator: ReadonlyUint8Array;
   /** User that owns this account */
   authority: Address;
-  /** Market this user is associated with */
-  market: Address;
-  collateral: bigint;
+  /** Collateral locked in open positions */
   lockedCollateral: bigint;
   bump: number;
 };
@@ -63,9 +61,7 @@ export type UserAccount = {
 export type UserAccountArgs = {
   /** User that owns this account */
   authority: Address;
-  /** Market this user is associated with */
-  market: Address;
-  collateral: number | bigint;
+  /** Collateral locked in open positions */
   lockedCollateral: number | bigint;
   bump: number;
 };
@@ -76,8 +72,6 @@ export function getUserAccountEncoder(): FixedSizeEncoder<UserAccountArgs> {
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
       ["authority", getAddressEncoder()],
-      ["market", getAddressEncoder()],
-      ["collateral", getU64Encoder()],
       ["lockedCollateral", getU64Encoder()],
       ["bump", getU8Encoder()],
     ]),
@@ -90,8 +84,6 @@ export function getUserAccountDecoder(): FixedSizeDecoder<UserAccount> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
     ["authority", getAddressDecoder()],
-    ["market", getAddressDecoder()],
-    ["collateral", getU64Decoder()],
     ["lockedCollateral", getU64Decoder()],
     ["bump", getU8Decoder()],
   ]);
@@ -159,5 +151,5 @@ export async function fetchAllMaybeUserAccount(
 }
 
 export function getUserAccountSize(): number {
-  return 89;
+  return 49;
 }

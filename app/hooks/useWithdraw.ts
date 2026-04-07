@@ -1,22 +1,24 @@
 import { type Address } from "@solana/kit";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSendTransaction, useWalletConnection } from "@solana/react-hooks";
 import { useCallback, useState } from "react";
 import { PERPS_PROGRAM_ADDRESS } from "../generated/perps";
-import { getWithdrawCollateralInstruction } from "../generated/perps/instructions/withdrawCollateral";
+import { getWithdrawCollateralInstructionDataEncoder } from "../generated/perps/instructions/withdrawCollateral";
 import { TOKEN_PROGRAM_ADDRESS } from "../lib/constants";
-import { deriveVaultPda } from "../lib/pdas";
+import { deriveUserCollateralPda } from "../lib/pdas";
 import { useUserAccountPda } from "./usePdas";
 
 /**
- * Custom hook to withdraw collateral from the user's perps account.
+ * Hook to withdraw collateral from the user's perps account.
+ * Invalidates collateral and token balance queries on success.
  *
- * @returns {Object} Object containing withdraw function, loading state, and error state
- * @returns {(amount: number, userTokenAccount: Address) => Promise<string | null>} withdraw - Function to withdraw collateral
- * @returns {boolean} isLoading - True while withdraw transaction is processing
- * @returns {Error | null} error - Error object if withdraw failed, null otherwise
+ * @returns withdraw - Function to withdraw collateral.
+ * @returns isLoading - True while withdraw transaction is processing.
+ * @returns error - Error object if withdraw failed, null otherwise.
  */
 export function useWithdraw() {
   const { send } = useSendTransaction();
+  const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const { wallet } = useWalletConnection();
@@ -24,6 +26,13 @@ export function useWithdraw() {
   const walletAddress = wallet?.account.address;
   const userAccountAddress = useUserAccountPda(walletAddress);
 
+  /**
+   * Sends a withdraw collateral instruction.
+   *
+   * @param amount - Amount in base units (USDC with 6 decimals).
+   * @param userTokenAccount - User's associated token account address.
+   * @returns Transaction signature string, or null on failure.
+   */
   const withdraw = useCallback(
     async (amount: number, userTokenAccount: Address) => {
       if (!walletAddress || !wallet || !userAccountAddress) {
@@ -35,23 +44,33 @@ export function useWithdraw() {
       setError(null);
 
       try {
-        // Derive vault PDA
-        const vaultAddress = await deriveVaultPda();
+        // Derive per-user collateral token account PDA
+        const userCollateralAddress = await deriveUserCollateralPda(walletAddress);
 
-        // Use the generated instruction builder to ensure correct account structure
-        const instruction = getWithdrawCollateralInstruction({
-          user: { address: walletAddress, role: 3 } as any,
-          userAccount: userAccountAddress,
-          vault: vaultAddress,
-          userTokenAccount: userTokenAccount,
-          tokenProgram: TOKEN_PROGRAM_ADDRESS,
-          amount: BigInt(Math.floor(amount)),
-        });
+        // Manually construct instruction with all required accounts
+        // This matches the Rust program's WithdrawCollateral struct
+        const instruction = {
+          programAddress: PERPS_PROGRAM_ADDRESS,
+          accounts: [
+            { address: walletAddress, role: 3 },              // user (WritableSigner)
+            { address: userAccountAddress, role: 1 },         // userAccount (Writable)
+            { address: userCollateralAddress, role: 1 },      // userCollateralTokenAccount (Writable)
+            { address: userTokenAccount, role: 1 },           // userTokenAccount (Writable)
+            { address: TOKEN_PROGRAM_ADDRESS, role: 0 },      // tokenProgram (Readonly)
+          ],
+          data: getWithdrawCollateralInstructionDataEncoder().encode({
+            amount: BigInt(Math.floor(amount)),
+          }),
+        };
 
         const signature = await send(
           { instructions: [instruction] },
           { skipPreflight: true }
         );
+
+        // Invalidate related queries so UI updates everywhere
+        await queryClient.invalidateQueries({ queryKey: ["collateral"] });
+        await queryClient.invalidateQueries({ queryKey: ["tokenBalance"] });
 
         return signature;
       } catch (err) {
@@ -62,7 +81,7 @@ export function useWithdraw() {
         setIsLoading(false);
       }
     },
-    [send, walletAddress, wallet, userAccountAddress]
+    [send, walletAddress, wallet, userAccountAddress, queryClient]
   );
 
   return {

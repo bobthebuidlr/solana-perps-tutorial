@@ -56,7 +56,9 @@ export type DepositCollateralInstruction<
   TAccountUser extends string | AccountMeta<string> = string,
   TAccountUserAccount extends string | AccountMeta<string> = string,
   TAccountUserTokenAccount extends string | AccountMeta<string> = string,
-  TAccountVault extends string | AccountMeta<string> = string,
+  TAccountUserCollateralTokenAccount extends string | AccountMeta<string> =
+    string,
+  TAccountUsdcMint extends string | AccountMeta<string> = string,
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   TAccountSystemProgram extends string | AccountMeta<string> =
@@ -75,9 +77,12 @@ export type DepositCollateralInstruction<
       TAccountUserTokenAccount extends string
         ? WritableAccount<TAccountUserTokenAccount>
         : TAccountUserTokenAccount,
-      TAccountVault extends string
-        ? WritableAccount<TAccountVault>
-        : TAccountVault,
+      TAccountUserCollateralTokenAccount extends string
+        ? WritableAccount<TAccountUserCollateralTokenAccount>
+        : TAccountUserCollateralTokenAccount,
+      TAccountUsdcMint extends string
+        ? ReadonlyAccount<TAccountUsdcMint>
+        : TAccountUsdcMint,
       TAccountTokenProgram extends string
         ? ReadonlyAccount<TAccountTokenProgram>
         : TAccountTokenProgram,
@@ -126,7 +131,8 @@ export type DepositCollateralAsyncInput<
   TAccountUser extends string = string,
   TAccountUserAccount extends string = string,
   TAccountUserTokenAccount extends string = string,
-  TAccountVault extends string = string,
+  TAccountUserCollateralTokenAccount extends string = string,
+  TAccountUsdcMint extends string = string,
   TAccountTokenProgram extends string = string,
   TAccountSystemProgram extends string = string,
 > = {
@@ -134,7 +140,9 @@ export type DepositCollateralAsyncInput<
   user: TransactionSigner<TAccountUser>;
   userAccount?: Address<TAccountUserAccount>;
   userTokenAccount: Address<TAccountUserTokenAccount>;
-  vault?: Address<TAccountVault>;
+  /** Per-user collateral token account PDA — holds the user's deposited USDC */
+  userCollateralTokenAccount?: Address<TAccountUserCollateralTokenAccount>;
+  usdcMint: Address<TAccountUsdcMint>;
   tokenProgram?: Address<TAccountTokenProgram>;
   systemProgram?: Address<TAccountSystemProgram>;
   amount: DepositCollateralInstructionDataArgs["amount"];
@@ -144,7 +152,8 @@ export async function getDepositCollateralInstructionAsync<
   TAccountUser extends string,
   TAccountUserAccount extends string,
   TAccountUserTokenAccount extends string,
-  TAccountVault extends string,
+  TAccountUserCollateralTokenAccount extends string,
+  TAccountUsdcMint extends string,
   TAccountTokenProgram extends string,
   TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof PERPS_PROGRAM_ADDRESS,
@@ -153,7 +162,8 @@ export async function getDepositCollateralInstructionAsync<
     TAccountUser,
     TAccountUserAccount,
     TAccountUserTokenAccount,
-    TAccountVault,
+    TAccountUserCollateralTokenAccount,
+    TAccountUsdcMint,
     TAccountTokenProgram,
     TAccountSystemProgram
   >,
@@ -164,7 +174,8 @@ export async function getDepositCollateralInstructionAsync<
     TAccountUser,
     TAccountUserAccount,
     TAccountUserTokenAccount,
-    TAccountVault,
+    TAccountUserCollateralTokenAccount,
+    TAccountUsdcMint,
     TAccountTokenProgram,
     TAccountSystemProgram
   >
@@ -180,7 +191,11 @@ export async function getDepositCollateralInstructionAsync<
       value: input.userTokenAccount ?? null,
       isWritable: true,
     },
-    vault: { value: input.vault ?? null, isWritable: true },
+    userCollateralTokenAccount: {
+      value: input.userCollateralTokenAccount ?? null,
+      isWritable: true,
+    },
+    usdcMint: { value: input.usdcMint ?? null, isWritable: false },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
@@ -202,11 +217,17 @@ export async function getDepositCollateralInstructionAsync<
       ],
     });
   }
-  if (!accounts.vault.value) {
-    accounts.vault.value = await getProgramDerivedAddress({
+  if (!accounts.userCollateralTokenAccount.value) {
+    accounts.userCollateralTokenAccount.value = await getProgramDerivedAddress({
       programAddress,
       seeds: [
-        getBytesEncoder().encode(new Uint8Array([118, 97, 117, 108, 116])),
+        getBytesEncoder().encode(
+          new Uint8Array([
+            117, 115, 101, 114, 95, 99, 111, 108, 108, 97, 116, 101, 114, 97,
+            108,
+          ]),
+        ),
+        getAddressEncoder().encode(expectAddress(accounts.user.value)),
       ],
     });
   }
@@ -225,7 +246,8 @@ export async function getDepositCollateralInstructionAsync<
       getAccountMeta(accounts.user),
       getAccountMeta(accounts.userAccount),
       getAccountMeta(accounts.userTokenAccount),
-      getAccountMeta(accounts.vault),
+      getAccountMeta(accounts.userCollateralTokenAccount),
+      getAccountMeta(accounts.usdcMint),
       getAccountMeta(accounts.tokenProgram),
       getAccountMeta(accounts.systemProgram),
     ],
@@ -238,7 +260,8 @@ export async function getDepositCollateralInstructionAsync<
     TAccountUser,
     TAccountUserAccount,
     TAccountUserTokenAccount,
-    TAccountVault,
+    TAccountUserCollateralTokenAccount,
+    TAccountUsdcMint,
     TAccountTokenProgram,
     TAccountSystemProgram
   >);
@@ -248,7 +271,8 @@ export type DepositCollateralInput<
   TAccountUser extends string = string,
   TAccountUserAccount extends string = string,
   TAccountUserTokenAccount extends string = string,
-  TAccountVault extends string = string,
+  TAccountUserCollateralTokenAccount extends string = string,
+  TAccountUsdcMint extends string = string,
   TAccountTokenProgram extends string = string,
   TAccountSystemProgram extends string = string,
 > = {
@@ -256,7 +280,9 @@ export type DepositCollateralInput<
   user: TransactionSigner<TAccountUser>;
   userAccount: Address<TAccountUserAccount>;
   userTokenAccount: Address<TAccountUserTokenAccount>;
-  vault: Address<TAccountVault>;
+  /** Per-user collateral token account PDA — holds the user's deposited USDC */
+  userCollateralTokenAccount: Address<TAccountUserCollateralTokenAccount>;
+  usdcMint: Address<TAccountUsdcMint>;
   tokenProgram?: Address<TAccountTokenProgram>;
   systemProgram?: Address<TAccountSystemProgram>;
   amount: DepositCollateralInstructionDataArgs["amount"];
@@ -266,7 +292,8 @@ export function getDepositCollateralInstruction<
   TAccountUser extends string,
   TAccountUserAccount extends string,
   TAccountUserTokenAccount extends string,
-  TAccountVault extends string,
+  TAccountUserCollateralTokenAccount extends string,
+  TAccountUsdcMint extends string,
   TAccountTokenProgram extends string,
   TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof PERPS_PROGRAM_ADDRESS,
@@ -275,7 +302,8 @@ export function getDepositCollateralInstruction<
     TAccountUser,
     TAccountUserAccount,
     TAccountUserTokenAccount,
-    TAccountVault,
+    TAccountUserCollateralTokenAccount,
+    TAccountUsdcMint,
     TAccountTokenProgram,
     TAccountSystemProgram
   >,
@@ -285,7 +313,8 @@ export function getDepositCollateralInstruction<
   TAccountUser,
   TAccountUserAccount,
   TAccountUserTokenAccount,
-  TAccountVault,
+  TAccountUserCollateralTokenAccount,
+  TAccountUsdcMint,
   TAccountTokenProgram,
   TAccountSystemProgram
 > {
@@ -300,7 +329,11 @@ export function getDepositCollateralInstruction<
       value: input.userTokenAccount ?? null,
       isWritable: true,
     },
-    vault: { value: input.vault ?? null, isWritable: true },
+    userCollateralTokenAccount: {
+      value: input.userCollateralTokenAccount ?? null,
+      isWritable: true,
+    },
+    usdcMint: { value: input.usdcMint ?? null, isWritable: false },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
@@ -328,7 +361,8 @@ export function getDepositCollateralInstruction<
       getAccountMeta(accounts.user),
       getAccountMeta(accounts.userAccount),
       getAccountMeta(accounts.userTokenAccount),
-      getAccountMeta(accounts.vault),
+      getAccountMeta(accounts.userCollateralTokenAccount),
+      getAccountMeta(accounts.usdcMint),
       getAccountMeta(accounts.tokenProgram),
       getAccountMeta(accounts.systemProgram),
     ],
@@ -341,7 +375,8 @@ export function getDepositCollateralInstruction<
     TAccountUser,
     TAccountUserAccount,
     TAccountUserTokenAccount,
-    TAccountVault,
+    TAccountUserCollateralTokenAccount,
+    TAccountUsdcMint,
     TAccountTokenProgram,
     TAccountSystemProgram
   >);
@@ -357,9 +392,11 @@ export type ParsedDepositCollateralInstruction<
     user: TAccountMetas[0];
     userAccount: TAccountMetas[1];
     userTokenAccount: TAccountMetas[2];
-    vault: TAccountMetas[3];
-    tokenProgram: TAccountMetas[4];
-    systemProgram: TAccountMetas[5];
+    /** Per-user collateral token account PDA — holds the user's deposited USDC */
+    userCollateralTokenAccount: TAccountMetas[3];
+    usdcMint: TAccountMetas[4];
+    tokenProgram: TAccountMetas[5];
+    systemProgram: TAccountMetas[6];
   };
   data: DepositCollateralInstructionData;
 };
@@ -372,7 +409,7 @@ export function parseDepositCollateralInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedDepositCollateralInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 6) {
+  if (instruction.accounts.length < 7) {
     // TODO: Coded error.
     throw new Error("Not enough accounts");
   }
@@ -388,7 +425,8 @@ export function parseDepositCollateralInstruction<
       user: getNextAccount(),
       userAccount: getNextAccount(),
       userTokenAccount: getNextAccount(),
-      vault: getNextAccount(),
+      userCollateralTokenAccount: getNextAccount(),
+      usdcMint: getNextAccount(),
       tokenProgram: getNextAccount(),
       systemProgram: getNextAccount(),
     },

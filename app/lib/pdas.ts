@@ -42,3 +42,24 @@ export async function deriveVaultPda(): Promise<Address> {
   });
   return pda;
 }
+
+/**
+ * Derives the per-user collateral token account PDA.
+ * @param wallet - User's wallet address.
+ * @returns Derived user collateral PDA address.
+ */
+export async function deriveUserCollateralPda(
+  wallet: Address
+): Promise<Address> {
+  const [pda] = await getProgramDerivedAddress({
+    programAddress: PERPS_PROGRAM_ADDRESS,
+    seeds: [
+      // "user_collateral"
+      getBytesEncoder().encode(
+        new Uint8Array([117, 115, 101, 114, 95, 99, 111, 108, 108, 97, 116, 101, 114, 97, 108])
+      ),
+      getAddressEncoder().encode(wallet),
+    ],
+  });
+  return pda;
+}

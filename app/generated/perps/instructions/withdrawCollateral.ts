@@ -55,7 +55,8 @@ export type WithdrawCollateralInstruction<
   TProgram extends string = typeof PERPS_PROGRAM_ADDRESS,
   TAccountUser extends string | AccountMeta<string> = string,
   TAccountUserAccount extends string | AccountMeta<string> = string,
-  TAccountVault extends string | AccountMeta<string> = string,
+  TAccountUserCollateralTokenAccount extends string | AccountMeta<string> =
+    string,
   TAccountUserTokenAccount extends string | AccountMeta<string> = string,
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
@@ -70,9 +71,9 @@ export type WithdrawCollateralInstruction<
       TAccountUserAccount extends string
         ? WritableAccount<TAccountUserAccount>
         : TAccountUserAccount,
-      TAccountVault extends string
-        ? WritableAccount<TAccountVault>
-        : TAccountVault,
+      TAccountUserCollateralTokenAccount extends string
+        ? WritableAccount<TAccountUserCollateralTokenAccount>
+        : TAccountUserCollateralTokenAccount,
       TAccountUserTokenAccount extends string
         ? WritableAccount<TAccountUserTokenAccount>
         : TAccountUserTokenAccount,
@@ -120,7 +121,7 @@ export function getWithdrawCollateralInstructionDataCodec(): FixedSizeCodec<
 export type WithdrawCollateralAsyncInput<
   TAccountUser extends string = string,
   TAccountUserAccount extends string = string,
-  TAccountVault extends string = string,
+  TAccountUserCollateralTokenAccount extends string = string,
   TAccountUserTokenAccount extends string = string,
   TAccountTokenProgram extends string = string,
 > = {
@@ -128,8 +129,8 @@ export type WithdrawCollateralAsyncInput<
   user: TransactionSigner<TAccountUser>;
   /** User collateral account */
   userAccount?: Address<TAccountUserAccount>;
-  /** Vault PDA that holds all user USDC — signs outbound transfers */
-  vault?: Address<TAccountVault>;
+  /** Per-user collateral token account PDA — signs outbound transfers */
+  userCollateralTokenAccount?: Address<TAccountUserCollateralTokenAccount>;
   /** User's USDC token account to receive the withdrawn collateral */
   userTokenAccount: Address<TAccountUserTokenAccount>;
   tokenProgram?: Address<TAccountTokenProgram>;
@@ -139,7 +140,7 @@ export type WithdrawCollateralAsyncInput<
 export async function getWithdrawCollateralInstructionAsync<
   TAccountUser extends string,
   TAccountUserAccount extends string,
-  TAccountVault extends string,
+  TAccountUserCollateralTokenAccount extends string,
   TAccountUserTokenAccount extends string,
   TAccountTokenProgram extends string,
   TProgramAddress extends Address = typeof PERPS_PROGRAM_ADDRESS,
@@ -147,7 +148,7 @@ export async function getWithdrawCollateralInstructionAsync<
   input: WithdrawCollateralAsyncInput<
     TAccountUser,
     TAccountUserAccount,
-    TAccountVault,
+    TAccountUserCollateralTokenAccount,
     TAccountUserTokenAccount,
     TAccountTokenProgram
   >,
@@ -157,7 +158,7 @@ export async function getWithdrawCollateralInstructionAsync<
     TProgramAddress,
     TAccountUser,
     TAccountUserAccount,
-    TAccountVault,
+    TAccountUserCollateralTokenAccount,
     TAccountUserTokenAccount,
     TAccountTokenProgram
   >
@@ -169,7 +170,10 @@ export async function getWithdrawCollateralInstructionAsync<
   const originalAccounts = {
     user: { value: input.user ?? null, isWritable: true },
     userAccount: { value: input.userAccount ?? null, isWritable: true },
-    vault: { value: input.vault ?? null, isWritable: true },
+    userCollateralTokenAccount: {
+      value: input.userCollateralTokenAccount ?? null,
+      isWritable: true,
+    },
     userTokenAccount: {
       value: input.userTokenAccount ?? null,
       isWritable: true,
@@ -194,11 +198,17 @@ export async function getWithdrawCollateralInstructionAsync<
       ],
     });
   }
-  if (!accounts.vault.value) {
-    accounts.vault.value = await getProgramDerivedAddress({
+  if (!accounts.userCollateralTokenAccount.value) {
+    accounts.userCollateralTokenAccount.value = await getProgramDerivedAddress({
       programAddress,
       seeds: [
-        getBytesEncoder().encode(new Uint8Array([118, 97, 117, 108, 116])),
+        getBytesEncoder().encode(
+          new Uint8Array([
+            117, 115, 101, 114, 95, 99, 111, 108, 108, 97, 116, 101, 114, 97,
+            108,
+          ]),
+        ),
+        getAddressEncoder().encode(expectAddress(accounts.user.value)),
       ],
     });
   }
@@ -212,7 +222,7 @@ export async function getWithdrawCollateralInstructionAsync<
     accounts: [
       getAccountMeta(accounts.user),
       getAccountMeta(accounts.userAccount),
-      getAccountMeta(accounts.vault),
+      getAccountMeta(accounts.userCollateralTokenAccount),
       getAccountMeta(accounts.userTokenAccount),
       getAccountMeta(accounts.tokenProgram),
     ],
@@ -224,7 +234,7 @@ export async function getWithdrawCollateralInstructionAsync<
     TProgramAddress,
     TAccountUser,
     TAccountUserAccount,
-    TAccountVault,
+    TAccountUserCollateralTokenAccount,
     TAccountUserTokenAccount,
     TAccountTokenProgram
   >);
@@ -233,7 +243,7 @@ export async function getWithdrawCollateralInstructionAsync<
 export type WithdrawCollateralInput<
   TAccountUser extends string = string,
   TAccountUserAccount extends string = string,
-  TAccountVault extends string = string,
+  TAccountUserCollateralTokenAccount extends string = string,
   TAccountUserTokenAccount extends string = string,
   TAccountTokenProgram extends string = string,
 > = {
@@ -241,8 +251,8 @@ export type WithdrawCollateralInput<
   user: TransactionSigner<TAccountUser>;
   /** User collateral account */
   userAccount: Address<TAccountUserAccount>;
-  /** Vault PDA that holds all user USDC — signs outbound transfers */
-  vault: Address<TAccountVault>;
+  /** Per-user collateral token account PDA — signs outbound transfers */
+  userCollateralTokenAccount: Address<TAccountUserCollateralTokenAccount>;
   /** User's USDC token account to receive the withdrawn collateral */
   userTokenAccount: Address<TAccountUserTokenAccount>;
   tokenProgram?: Address<TAccountTokenProgram>;
@@ -252,7 +262,7 @@ export type WithdrawCollateralInput<
 export function getWithdrawCollateralInstruction<
   TAccountUser extends string,
   TAccountUserAccount extends string,
-  TAccountVault extends string,
+  TAccountUserCollateralTokenAccount extends string,
   TAccountUserTokenAccount extends string,
   TAccountTokenProgram extends string,
   TProgramAddress extends Address = typeof PERPS_PROGRAM_ADDRESS,
@@ -260,7 +270,7 @@ export function getWithdrawCollateralInstruction<
   input: WithdrawCollateralInput<
     TAccountUser,
     TAccountUserAccount,
-    TAccountVault,
+    TAccountUserCollateralTokenAccount,
     TAccountUserTokenAccount,
     TAccountTokenProgram
   >,
@@ -269,7 +279,7 @@ export function getWithdrawCollateralInstruction<
   TProgramAddress,
   TAccountUser,
   TAccountUserAccount,
-  TAccountVault,
+  TAccountUserCollateralTokenAccount,
   TAccountUserTokenAccount,
   TAccountTokenProgram
 > {
@@ -280,7 +290,10 @@ export function getWithdrawCollateralInstruction<
   const originalAccounts = {
     user: { value: input.user ?? null, isWritable: true },
     userAccount: { value: input.userAccount ?? null, isWritable: true },
-    vault: { value: input.vault ?? null, isWritable: true },
+    userCollateralTokenAccount: {
+      value: input.userCollateralTokenAccount ?? null,
+      isWritable: true,
+    },
     userTokenAccount: {
       value: input.userTokenAccount ?? null,
       isWritable: true,
@@ -306,7 +319,7 @@ export function getWithdrawCollateralInstruction<
     accounts: [
       getAccountMeta(accounts.user),
       getAccountMeta(accounts.userAccount),
-      getAccountMeta(accounts.vault),
+      getAccountMeta(accounts.userCollateralTokenAccount),
       getAccountMeta(accounts.userTokenAccount),
       getAccountMeta(accounts.tokenProgram),
     ],
@@ -318,7 +331,7 @@ export function getWithdrawCollateralInstruction<
     TProgramAddress,
     TAccountUser,
     TAccountUserAccount,
-    TAccountVault,
+    TAccountUserCollateralTokenAccount,
     TAccountUserTokenAccount,
     TAccountTokenProgram
   >);
@@ -334,8 +347,8 @@ export type ParsedWithdrawCollateralInstruction<
     user: TAccountMetas[0];
     /** User collateral account */
     userAccount: TAccountMetas[1];
-    /** Vault PDA that holds all user USDC — signs outbound transfers */
-    vault: TAccountMetas[2];
+    /** Per-user collateral token account PDA — signs outbound transfers */
+    userCollateralTokenAccount: TAccountMetas[2];
     /** User's USDC token account to receive the withdrawn collateral */
     userTokenAccount: TAccountMetas[3];
     tokenProgram: TAccountMetas[4];
@@ -366,7 +379,7 @@ export function parseWithdrawCollateralInstruction<
     accounts: {
       user: getNextAccount(),
       userAccount: getNextAccount(),
-      vault: getNextAccount(),
+      userCollateralTokenAccount: getNextAccount(),
       userTokenAccount: getNextAccount(),
       tokenProgram: getNextAccount(),
     },

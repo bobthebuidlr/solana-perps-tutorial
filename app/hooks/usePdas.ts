@@ -50,6 +50,35 @@ export function useOraclePda(): Address | null {
 }
 
 /**
+ * Derives and caches the per-user collateral token account PDA.
+ * @param walletAddress - Connected wallet address, or undefined if not connected.
+ * @returns User collateral PDA address, or null if wallet is not connected or PDA is still deriving.
+ */
+export function useUserCollateralPda(walletAddress?: Address): Address | null {
+  const [pda, setPda] = useState<Address | null>(null);
+
+  useEffect(() => {
+    if (!walletAddress) {
+      setPda(null);
+      return;
+    }
+
+    getProgramDerivedAddress({
+      programAddress: PERPS_PROGRAM_ADDRESS,
+      seeds: [
+        // "user_collateral"
+        getBytesEncoder().encode(
+          new Uint8Array([117, 115, 101, 114, 95, 99, 111, 108, 108, 97, 116, 101, 114, 97, 108])
+        ),
+        getAddressEncoder().encode(walletAddress),
+      ],
+    }).then(([derived]) => setPda(derived));
+  }, [walletAddress]);
+
+  return pda;
+}
+
+/**
  * Derives and caches the user account PDA for the given wallet address.
  * @param walletAddress - Connected wallet address, or undefined if not connected.
  * @returns User account PDA address, or null if wallet is not connected or PDA is still deriving.

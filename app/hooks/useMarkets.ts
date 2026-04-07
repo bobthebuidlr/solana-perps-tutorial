@@ -1,62 +1,40 @@
+import { useQuery } from "@tanstack/react-query";
 import { useSolanaClient } from "@solana/react-hooks";
-import { useCallback, useEffect, useState } from "react";
 import { fetchMarkets } from "../generated/perps";
 import { type PerpsMarket } from "../generated/perps/types";
 import { useMarketsPda } from "./usePdas";
 
 /**
- * Custom hook to fetch all available perps markets from the Solana program.
+ * Fetches all available perps markets from the Solana program.
+ * Uses React Query for caching and deduplication.
  *
- * @returns {Object} Object containing markets data, loading state, error state, and refresh function
- * @returns {PerpsMarket[] | null} markets - Array of all available markets or null if not loaded
- * @returns {boolean} isLoading - True while fetching markets data
- * @returns {Error | null} error - Error object if fetch failed, null otherwise
- * @returns {() => Promise<void>} refresh - Function to manually refresh markets data
+ * @returns markets - Array of all available markets or null if not loaded.
+ * @returns isLoading - True while fetching markets data.
+ * @returns error - Error object if fetch failed, null otherwise.
  */
 export function useMarkets() {
   const client = useSolanaClient();
   const marketsAddress = useMarketsPda();
-  const [markets, setMarkets] = useState<PerpsMarket[] | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
 
-  // Fetch markets data
-  const fetchMarketsData = useCallback(async () => {
-    if (!marketsAddress || !client?.runtime?.rpc) {
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ["markets"],
+    queryFn: async (): Promise<PerpsMarket[]> => {
+      if (!marketsAddress || !client?.runtime?.rpc) {
+        return [];
+      }
       const marketsAccount = await fetchMarkets(
         client.runtime.rpc,
         marketsAddress
       );
-      setMarkets(marketsAccount.data.perps);
-    } catch (err) {
-      console.error("Failed to fetch markets:", err);
-      setError(
-        err instanceof Error ? err : new Error("Failed to fetch markets")
-      );
-      setMarkets(null);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [marketsAddress, client]);
-
-  // Auto-fetch when address is ready
-  useEffect(() => {
-    if (marketsAddress && client?.runtime?.rpc) {
-      fetchMarketsData();
-    }
-  }, [marketsAddress, client, fetchMarketsData]);
+      return marketsAccount.data.perps;
+    },
+    enabled: !!marketsAddress && !!client?.runtime?.rpc,
+  });
 
   return {
-    markets,
+    markets: data ?? null,
     isLoading,
-    error,
-    refresh: fetchMarketsData,
+    error: error as Error | null,
+    refresh: refetch,
   };
 }

@@ -66,6 +66,8 @@ export type OpenPositionInstruction<
   TAccountPosition extends string | AccountMeta<string> = string,
   TAccountMarkets extends string | AccountMeta<string> = string,
   TAccountOracle extends string | AccountMeta<string> = string,
+  TAccountUserCollateralTokenAccount extends string | AccountMeta<string> =
+    string,
   TAccountSystemProgram extends string | AccountMeta<string> =
     "11111111111111111111111111111111",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
@@ -88,6 +90,9 @@ export type OpenPositionInstruction<
       TAccountOracle extends string
         ? ReadonlyAccount<TAccountOracle>
         : TAccountOracle,
+      TAccountUserCollateralTokenAccount extends string
+        ? ReadonlyAccount<TAccountUserCollateralTokenAccount>
+        : TAccountUserCollateralTokenAccount,
       TAccountSystemProgram extends string
         ? ReadonlyAccount<TAccountSystemProgram>
         : TAccountSystemProgram,
@@ -145,6 +150,7 @@ export type OpenPositionAsyncInput<
   TAccountPosition extends string = string,
   TAccountMarkets extends string = string,
   TAccountOracle extends string = string,
+  TAccountUserCollateralTokenAccount extends string = string,
   TAccountSystemProgram extends string = string,
 > = {
   /** User opening the position */
@@ -154,6 +160,8 @@ export type OpenPositionAsyncInput<
   position?: Address<TAccountPosition>;
   markets: Address<TAccountMarkets>;
   oracle: Address<TAccountOracle>;
+  /** Per-user collateral token account PDA — read to check available balance */
+  userCollateralTokenAccount?: Address<TAccountUserCollateralTokenAccount>;
   systemProgram?: Address<TAccountSystemProgram>;
   tokenMint: OpenPositionInstructionDataArgs["tokenMint"];
   direction: OpenPositionInstructionDataArgs["direction"];
@@ -166,6 +174,7 @@ export async function getOpenPositionInstructionAsync<
   TAccountPosition extends string,
   TAccountMarkets extends string,
   TAccountOracle extends string,
+  TAccountUserCollateralTokenAccount extends string,
   TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof PERPS_PROGRAM_ADDRESS,
 >(
@@ -175,6 +184,7 @@ export async function getOpenPositionInstructionAsync<
     TAccountPosition,
     TAccountMarkets,
     TAccountOracle,
+    TAccountUserCollateralTokenAccount,
     TAccountSystemProgram
   >,
   config?: { programAddress?: TProgramAddress },
@@ -186,6 +196,7 @@ export async function getOpenPositionInstructionAsync<
     TAccountPosition,
     TAccountMarkets,
     TAccountOracle,
+    TAccountUserCollateralTokenAccount,
     TAccountSystemProgram
   >
 > {
@@ -199,6 +210,10 @@ export async function getOpenPositionInstructionAsync<
     position: { value: input.position ?? null, isWritable: true },
     markets: { value: input.markets ?? null, isWritable: true },
     oracle: { value: input.oracle ?? null, isWritable: false },
+    userCollateralTokenAccount: {
+      value: input.userCollateralTokenAccount ?? null,
+      isWritable: false,
+    },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
@@ -231,6 +246,20 @@ export async function getOpenPositionInstructionAsync<
       ],
     });
   }
+  if (!accounts.userCollateralTokenAccount.value) {
+    accounts.userCollateralTokenAccount.value = await getProgramDerivedAddress({
+      programAddress,
+      seeds: [
+        getBytesEncoder().encode(
+          new Uint8Array([
+            117, 115, 101, 114, 95, 99, 111, 108, 108, 97, 116, 101, 114, 97,
+            108,
+          ]),
+        ),
+        getAddressEncoder().encode(expectAddress(accounts.user.value)),
+      ],
+    });
+  }
   if (!accounts.systemProgram.value) {
     accounts.systemProgram.value =
       "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
@@ -244,6 +273,7 @@ export async function getOpenPositionInstructionAsync<
       getAccountMeta(accounts.position),
       getAccountMeta(accounts.markets),
       getAccountMeta(accounts.oracle),
+      getAccountMeta(accounts.userCollateralTokenAccount),
       getAccountMeta(accounts.systemProgram),
     ],
     data: getOpenPositionInstructionDataEncoder().encode(
@@ -257,6 +287,7 @@ export async function getOpenPositionInstructionAsync<
     TAccountPosition,
     TAccountMarkets,
     TAccountOracle,
+    TAccountUserCollateralTokenAccount,
     TAccountSystemProgram
   >);
 }
@@ -267,6 +298,7 @@ export type OpenPositionInput<
   TAccountPosition extends string = string,
   TAccountMarkets extends string = string,
   TAccountOracle extends string = string,
+  TAccountUserCollateralTokenAccount extends string = string,
   TAccountSystemProgram extends string = string,
 > = {
   /** User opening the position */
@@ -276,6 +308,8 @@ export type OpenPositionInput<
   position: Address<TAccountPosition>;
   markets: Address<TAccountMarkets>;
   oracle: Address<TAccountOracle>;
+  /** Per-user collateral token account PDA — read to check available balance */
+  userCollateralTokenAccount: Address<TAccountUserCollateralTokenAccount>;
   systemProgram?: Address<TAccountSystemProgram>;
   tokenMint: OpenPositionInstructionDataArgs["tokenMint"];
   direction: OpenPositionInstructionDataArgs["direction"];
@@ -288,6 +322,7 @@ export function getOpenPositionInstruction<
   TAccountPosition extends string,
   TAccountMarkets extends string,
   TAccountOracle extends string,
+  TAccountUserCollateralTokenAccount extends string,
   TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof PERPS_PROGRAM_ADDRESS,
 >(
@@ -297,6 +332,7 @@ export function getOpenPositionInstruction<
     TAccountPosition,
     TAccountMarkets,
     TAccountOracle,
+    TAccountUserCollateralTokenAccount,
     TAccountSystemProgram
   >,
   config?: { programAddress?: TProgramAddress },
@@ -307,6 +343,7 @@ export function getOpenPositionInstruction<
   TAccountPosition,
   TAccountMarkets,
   TAccountOracle,
+  TAccountUserCollateralTokenAccount,
   TAccountSystemProgram
 > {
   // Program address.
@@ -319,6 +356,10 @@ export function getOpenPositionInstruction<
     position: { value: input.position ?? null, isWritable: true },
     markets: { value: input.markets ?? null, isWritable: true },
     oracle: { value: input.oracle ?? null, isWritable: false },
+    userCollateralTokenAccount: {
+      value: input.userCollateralTokenAccount ?? null,
+      isWritable: false,
+    },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
@@ -343,6 +384,7 @@ export function getOpenPositionInstruction<
       getAccountMeta(accounts.position),
       getAccountMeta(accounts.markets),
       getAccountMeta(accounts.oracle),
+      getAccountMeta(accounts.userCollateralTokenAccount),
       getAccountMeta(accounts.systemProgram),
     ],
     data: getOpenPositionInstructionDataEncoder().encode(
@@ -356,6 +398,7 @@ export function getOpenPositionInstruction<
     TAccountPosition,
     TAccountMarkets,
     TAccountOracle,
+    TAccountUserCollateralTokenAccount,
     TAccountSystemProgram
   >);
 }
@@ -373,7 +416,9 @@ export type ParsedOpenPositionInstruction<
     position: TAccountMetas[2];
     markets: TAccountMetas[3];
     oracle: TAccountMetas[4];
-    systemProgram: TAccountMetas[5];
+    /** Per-user collateral token account PDA — read to check available balance */
+    userCollateralTokenAccount: TAccountMetas[5];
+    systemProgram: TAccountMetas[6];
   };
   data: OpenPositionInstructionData;
 };
@@ -386,7 +431,7 @@ export function parseOpenPositionInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedOpenPositionInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 6) {
+  if (instruction.accounts.length < 7) {
     // TODO: Coded error.
     throw new Error("Not enough accounts");
   }
@@ -404,6 +449,7 @@ export function parseOpenPositionInstruction<
       position: getNextAccount(),
       markets: getNextAccount(),
       oracle: getNextAccount(),
+      userCollateralTokenAccount: getNextAccount(),
       systemProgram: getNextAccount(),
     },
     data: getOpenPositionInstructionDataDecoder().decode(instruction.data),

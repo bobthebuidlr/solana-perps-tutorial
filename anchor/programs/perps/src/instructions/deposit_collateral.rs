@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Token, TokenAccount, Transfer};
+use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
 use crate::{constants::*, error::ErrorCode, state::UserAccount};
 
@@ -24,17 +24,26 @@ pub struct DepositCollateral<'info> {
     )]
     pub user_token_account: Account<'info, TokenAccount>,
 
+    /// Per-user collateral token account PDA — holds the user's deposited USDC
     #[account(
-      mut,
-      seeds = [VAULT_SEED],
-      bump
+      init_if_needed,
+      payer = user,
+      seeds = [USER_COLLATERAL_SEED, user.key().as_ref()],
+      bump,
+      token::mint = usdc_mint,
+      token::authority = user_collateral_token_account
     )]
-    pub vault: Account<'info, TokenAccount>,
+    pub user_collateral_token_account: Account<'info, TokenAccount>,
 
+    pub usdc_mint: Account<'info, Mint>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }
 
+/// Deposits USDC from the user's wallet into their per-user collateral token account.
+/// @param ctx - Accounts context.
+/// @param amount - Amount of USDC (6-decimal) to deposit.
+/// @returns Ok(()) on success.
 pub fn handler(ctx: Context<DepositCollateral>, amount: u64) -> Result<()> {
     require!(amount > 0, ErrorCode::InvalidAmount);
 
@@ -42,15 +51,17 @@ pub fn handler(ctx: Context<DepositCollateral>, amount: u64) -> Result<()> {
 
     if user_account.authority == Pubkey::default() {
         user_account.authority = ctx.accounts.user.key();
-        user_account.collateral = 0;
         user_account.locked_collateral = 0;
         user_account.bump = ctx.bumps.user_account;
     }
 
-    // Transfer tokens from user to vault
+    // Transfer tokens from user wallet to user's collateral token account
     let cpi_accounts = Transfer {
         from: ctx.accounts.user_token_account.to_account_info(),
-        to: ctx.accounts.vault.to_account_info(),
+        to: ctx
+            .accounts
+            .user_collateral_token_account
+            .to_account_info(),
         authority: ctx.accounts.user.to_account_info(),
     };
 
@@ -59,14 +70,7 @@ pub fn handler(ctx: Context<DepositCollateral>, amount: u64) -> Result<()> {
 
     token::transfer(cpi_ctx, amount)?;
 
-    // Update user collateral
-    user_account.collateral = user_account
-        .collateral
-        .checked_add(amount)
-        .ok_or(ErrorCode::ArithmeticOverflow)?;
-
     msg!("User deposited {} tokens", amount);
-    msg!("User collateral: {}", user_account.collateral);
 
     Ok(())
 }
