@@ -2,8 +2,8 @@ import { type Address } from "@solana/kit";
 import { useSendTransaction, useWalletConnection } from "@solana/react-hooks";
 import { useCallback, useState } from "react";
 import { PERPS_PROGRAM_ADDRESS } from "../generated/perps";
-import { getWithdrawCollateralInstructionDataEncoder } from "../generated/perps/instructions/withdrawCollateral";
-import { SYSTEM_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS } from "../lib/constants";
+import { getWithdrawCollateralInstruction } from "../generated/perps/instructions/withdrawCollateral";
+import { TOKEN_PROGRAM_ADDRESS } from "../lib/constants";
 import { deriveVaultPda } from "../lib/pdas";
 import { useUserAccountPda } from "./usePdas";
 
@@ -38,26 +38,19 @@ export function useWithdraw() {
         // Derive vault PDA
         const vaultAddress = await deriveVaultPda();
 
-        // Manually construct instruction with all 6 required accounts
-        // This matches the Rust program's WithdrawCollateral struct
-        const instruction = {
-          programAddress: PERPS_PROGRAM_ADDRESS,
-          accounts: [
-            { address: walletAddress, role: 3 },              // user (WritableSigner)
-            { address: userAccountAddress, role: 1 },         // userAccount (Writable)
-            { address: userTokenAccount, role: 1 },           // userTokenAccount (Writable)
-            { address: vaultAddress, role: 1 },               // vault (Writable)
-            { address: TOKEN_PROGRAM_ADDRESS, role: 0 },      // tokenProgram (Readonly)
-            { address: SYSTEM_PROGRAM_ADDRESS, role: 0 },     // systemProgram (Readonly)
-          ],
-          data: getWithdrawCollateralInstructionDataEncoder().encode({
-            amount: BigInt(Math.floor(amount)),
-          }),
-        };
+        // Use the generated instruction builder to ensure correct account structure
+        const instruction = getWithdrawCollateralInstruction({
+          user: { address: walletAddress, role: 3 } as any,
+          userAccount: userAccountAddress,
+          vault: vaultAddress,
+          userTokenAccount: userTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ADDRESS,
+          amount: BigInt(Math.floor(amount)),
+        });
 
         const signature = await send(
           { instructions: [instruction] },
-          { skipPreflight: true },
+          { skipPreflight: true }
         );
 
         return signature;
