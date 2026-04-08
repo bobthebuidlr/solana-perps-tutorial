@@ -1,31 +1,69 @@
 @import "tailwindcss";
 
+/* Dark-mode first — trading platforms are always dark */
 :root {
-  --background: #ffffff;
-  --foreground: oklch(0.145 0 0); /* deep neutral */
-  --border-strong: oklch(0.839 0.0187 78.23);
-  --border-low: oklch(0.927 0.0122 96.43);
-  --accent: oklch(0 0 0);
-  --muted: #3a3a3a; /* darker for better light-mode contrast */
-  --cream: oklch(0.9553 0.0029 84.56);
-  --card: #ffffff;
-  --card-foreground: oklch(0.145 0 0);
+  color-scheme: dark;
+
+  /* Background layers (darkest → lightest) */
+  --background: oklch(0.13 0.008 265);
+  --card: oklch(0.16 0.008 265);
+  --card-elevated: oklch(0.19 0.008 265);
+  --card-foreground: oklch(0.95 0 0);
+  --surface: oklch(0.21 0.008 265);
+  --surface-hover: oklch(0.24 0.008 265);
+
+  /* Borders */
+  --border-low: oklch(1 0 0 / 0.06);
+  --border-strong: oklch(1 0 0 / 0.12);
+
+  /* Text hierarchy */
+  --foreground: oklch(0.95 0 0);
+  --muted: oklch(0.55 0.01 265);
+
+  /* Brand accent — electric blue-violet */
+  --accent: oklch(0.65 0.20 265);
+  --accent-hover: oklch(0.60 0.22 265);
+  --accent-muted: oklch(0.65 0.20 265 / 0.15);
+
+  /* Trading colors */
+  --long: oklch(0.72 0.19 155);
+  --long-muted: oklch(0.72 0.19 155 / 0.15);
+  --short: oklch(0.65 0.22 25);
+  --short-muted: oklch(0.65 0.22 25 / 0.15);
+
+  /* Inputs */
+  --input-bg: oklch(0.13 0.008 265);
+  --input-border: oklch(1 0 0 / 0.08);
+
+  /* Shared */
   --radius: 0.625rem;
   --font-sans: var(--font-inter), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
+/* Light mode fallback */
+@media (prefers-color-scheme: light) {
   :root {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --border-strong: oklch(1 0 0 / 0.12);
-    --border-low: oklch(1 0 0 / 0.08);
-    --accent: oklch(0.922 0 0);
-    --muted: oklch(0.75 0.01 260); /* brighten muted text in dark mode */
-    --cream: oklch(0.22 0.009 70.82);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
+    color-scheme: light;
+    --background: #ffffff;
+    --foreground: oklch(0.145 0 0);
+    --card: #ffffff;
+    --card-elevated: #ffffff;
+    --card-foreground: oklch(0.145 0 0);
+    --surface: oklch(0.955 0.003 85);
+    --surface-hover: oklch(0.93 0.005 85);
+    --border-strong: oklch(0.839 0.019 78);
+    --border-low: oklch(0.927 0.012 96);
+    --accent: oklch(0.50 0.20 265);
+    --accent-hover: oklch(0.45 0.22 265);
+    --accent-muted: oklch(0.50 0.20 265 / 0.10);
+    --muted: #3a3a3a;
+    --long: oklch(0.55 0.19 155);
+    --long-muted: oklch(0.55 0.19 155 / 0.10);
+    --short: oklch(0.55 0.22 25);
+    --short-muted: oklch(0.55 0.22 25 / 0.10);
+    --input-bg: oklch(0.97 0.005 85);
+    --input-border: oklch(0.927 0.012 96);
   }
 }
 
@@ -33,14 +71,24 @@
   --color-background: var(--background);
   --color-bg1: var(--background);
   --color-foreground: var(--foreground);
-  --color-cream: var(--cream);
+  --color-card: var(--card);
+  --color-card-elevated: var(--card-elevated);
+  --color-card-foreground: var(--card-foreground);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
   --color-border: var(--border-strong);
   --color-border-strong: var(--border-strong);
   --color-border-low: var(--border-low);
   --color-primary: var(--accent);
+  --color-primary-hover: var(--accent-hover);
+  --color-primary-muted: var(--accent-muted);
   --color-muted: var(--muted);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
+  --color-long: var(--long);
+  --color-long-muted: var(--long-muted);
+  --color-short: var(--short);
+  --color-short-muted: var(--short-muted);
+  --color-input-bg: var(--input-bg);
+  --color-input-border: var(--input-border);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
   --radius-md: calc(var(--radius) - 2px);
@@ -56,6 +104,5 @@
   body {
     @apply bg-bg1 text-foreground antialiased;
     font-family: var(--font-sans);
-    color-scheme: light dark;
   }
 }

@@ -36,12 +36,12 @@ export function Markets() {
 
   if (isLoading) {
     return (
-      <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
+      <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_2px_8px_-2px_rgba(0,0,0,0.4)]">
         <div className="p-6 space-y-2">
           {[...Array(3)].map((_, i) => (
             <div
               key={i}
-              className="h-14 animate-pulse rounded-xl bg-cream/50"
+              className="h-14 animate-pulse rounded-xl bg-surface"
             />
           ))}
         </div>
@@ -51,12 +51,12 @@ export function Markets() {
 
   if (error) {
     return (
-      <div className="overflow-hidden rounded-2xl border border-border-low bg-card p-6 shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
-        <div className="rounded-xl border border-red-500/20 bg-red-50/50 px-4 py-3 text-sm">
-          <p className="text-red-600">{error.message}</p>
+      <div className="overflow-hidden rounded-2xl border border-border-low bg-card p-6 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.4)]">
+        <div className="rounded-xl border border-short/20 bg-short-muted px-4 py-3 text-sm">
+          <p className="text-short">{error.message}</p>
           <button
             onClick={refresh}
-            className="mt-2 rounded-lg bg-foreground px-3 py-1.5 text-xs font-medium text-background transition hover:opacity-90"
+            className="mt-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white transition hover:bg-primary-hover"
           >
             Retry
           </button>
@@ -67,8 +67,8 @@ export function Markets() {
 
   if (!markets || markets.length === 0) {
     return (
-      <div className="overflow-hidden rounded-2xl border border-border-low bg-card p-6 shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
-        <div className="rounded-xl bg-cream/50 px-4 py-8 text-center text-sm text-muted">
+      <div className="overflow-hidden rounded-2xl border border-border-low bg-card p-6 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.4)]">
+        <div className="rounded-xl bg-surface px-4 py-8 text-center text-sm text-muted">
           No markets available
         </div>
       </div>
@@ -116,12 +116,12 @@ export function MarketsList({
 }) {
   if (isLoading) {
     return (
-      <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
+      <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_2px_8px_-2px_rgba(0,0,0,0.4)]">
         <div className="p-6 space-y-2">
           {[...Array(3)].map((_, i) => (
             <div
               key={i}
-              className="h-14 animate-pulse rounded-xl bg-cream/50"
+              className="h-14 animate-pulse rounded-xl bg-surface"
             />
           ))}
         </div>
@@ -131,12 +131,12 @@ export function MarketsList({
 
   if (error) {
     return (
-      <div className="overflow-hidden rounded-2xl border border-border-low bg-card p-6 shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
-        <div className="rounded-xl border border-red-500/20 bg-red-50/50 px-4 py-3 text-sm">
-          <p className="text-red-600">{error.message}</p>
+      <div className="overflow-hidden rounded-2xl border border-border-low bg-card p-6 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.4)]">
+        <div className="rounded-xl border border-short/20 bg-short-muted px-4 py-3 text-sm">
+          <p className="text-short">{error.message}</p>
           <button
             onClick={refresh}
-            className="mt-2 rounded-lg bg-foreground px-3 py-1.5 text-xs font-medium text-background transition hover:opacity-90"
+            className="mt-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white transition hover:bg-primary-hover"
           >
             Retry
           </button>
@@ -147,8 +147,8 @@ export function MarketsList({
 
   if (!markets || markets.length === 0) {
     return (
-      <div className="overflow-hidden rounded-2xl border border-border-low bg-card p-6 shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
-        <div className="rounded-xl bg-cream/50 px-4 py-8 text-center text-sm text-muted">
+      <div className="overflow-hidden rounded-2xl border border-border-low bg-card p-6 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.4)]">
+        <div className="rounded-xl bg-surface px-4 py-8 text-center text-sm text-muted">
           No markets available
         </div>
       </div>
@@ -156,11 +156,11 @@ export function MarketsList({
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
+    <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_2px_8px_-2px_rgba(0,0,0,0.4)]">
       <div className="p-6">
         <div className="mb-4 flex items-center justify-between">
           <p className="text-sm font-semibold">Markets</p>
-          <span className="rounded-full bg-cream px-2.5 py-0.5 text-xs font-semibold text-foreground/70">
+          <span className="rounded-full bg-surface-hover px-2.5 py-0.5 text-xs font-semibold text-foreground/70">
             {markets.length}
           </span>
         </div>
@@ -265,7 +265,7 @@ function MarketRow({
     <tr
       onClick={onClick}
       className={`cursor-pointer transition-colors ${
-        isSelected ? "bg-cream/70" : "hover:bg-cream/40"
+        isSelected ? "bg-surface-hover" : "hover:bg-surface"
       }`}
     >
       {/* Market identity */}
@@ -274,7 +274,7 @@ function MarketRow({
           {/* Selection indicator */}
           <span
             className={`h-4 w-0.5 rounded-full transition-colors ${
-              isSelected ? "bg-foreground" : "bg-transparent"
+              isSelected ? "bg-primary" : "bg-transparent"
             }`}
           />
           <span
@@ -299,9 +299,9 @@ function MarketRow({
           {formatOi(totalOi)}
         </p>
         <div className="mt-1 flex items-center justify-end gap-1">
-          <div className="h-1 w-12 overflow-hidden rounded-full bg-red-500/25">
+          <div className="h-1 w-12 overflow-hidden rounded-full bg-short-muted">
             <div
-              className="h-full rounded-full bg-green-500/70 transition-all"
+              className="h-full rounded-full bg-long transition-all"
               style={{ width: `${longPct}%` }}
             />
           </div>
@@ -313,8 +313,8 @@ function MarketRow({
         <span
           className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 font-mono text-xs font-semibold ${
             fundingPositive
-              ? "bg-green-500/10 text-green-600"
-              : "bg-red-500/10 text-red-500"
+              ? "bg-long-muted text-long"
+              : "bg-short-muted text-short"
           }`}
         >
           {fundingRate}
@@ -425,7 +425,7 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
 
   if (!walletAddress) {
     return (
-      <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
+      <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_2px_8px_-2px_rgba(0,0,0,0.4)]">
         <div className="flex h-full flex-col items-center justify-center p-6 py-16 text-center gap-2">
           <p className="text-sm text-muted">Connect your wallet to trade.</p>
         </div>
@@ -435,11 +435,11 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
 
   if (collateralLoading || pricesLoading) {
     return (
-      <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
+      <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_2px_8px_-2px_rgba(0,0,0,0.4)]">
         <div className="space-y-3 p-6">
-          <div className="h-9 animate-pulse rounded-xl bg-cream/50" />
-          <div className="h-20 animate-pulse rounded-xl bg-cream/50" />
-          <div className="h-12 animate-pulse rounded-xl bg-cream/50" />
+          <div className="h-9 animate-pulse rounded-xl bg-surface" />
+          <div className="h-20 animate-pulse rounded-xl bg-surface" />
+          <div className="h-12 animate-pulse rounded-xl bg-surface" />
         </div>
       </div>
     );
@@ -467,7 +467,7 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
   // No collateral deposited yet
   if (!hasCollateral) {
     return (
-      <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
+      <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_2px_8px_-2px_rgba(0,0,0,0.4)]">
         <div className="space-y-4 p-6">
           {market && (
             <MarketHeader
@@ -476,8 +476,8 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
               name={market.name}
             />
           )}
-          <div className="space-y-3 rounded-xl border border-dashed border-border-strong bg-cream/20 p-6 text-center">
-            <span className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-cream text-base">
+          <div className="space-y-3 rounded-xl border border-dashed border-border-strong bg-surface p-6 text-center">
+            <span className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-surface-hover text-base">
               ⚡
             </span>
             <div>
@@ -496,7 +496,7 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
+    <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_2px_8px_-2px_rgba(0,0,0,0.4)]">
       <div className="space-y-4 p-6">
         {/* Market header */}
         {market && (
@@ -508,12 +508,12 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
         )}
 
         {/* Long / Short direction toggle */}
-        <div className="grid grid-cols-2 gap-1 rounded-xl border border-border-low bg-cream/30 p-1">
+        <div className="grid grid-cols-2 gap-1 rounded-xl border border-border-low bg-surface p-1">
           <button
             onClick={() => setDirection(PositionDirection.Long)}
             className={`rounded-lg py-2.5 text-sm font-semibold transition ${
               direction === PositionDirection.Long
-                ? "bg-green-500/15 text-green-600 shadow-sm"
+                ? "bg-long-muted text-long shadow-sm"
                 : "text-muted hover:text-foreground"
             }`}
           >
@@ -523,7 +523,7 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
             onClick={() => setDirection(PositionDirection.Short)}
             className={`rounded-lg py-2.5 text-sm font-semibold transition ${
               direction === PositionDirection.Short
-                ? "bg-red-500/15 text-red-500 shadow-sm"
+                ? "bg-short-muted text-short shadow-sm"
                 : "text-muted hover:text-foreground"
             }`}
           >
@@ -564,7 +564,7 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
               step="0.000001"
               min="0"
               disabled={isSubmitting || !oraclePrice}
-              className="w-full rounded-xl border border-border-low bg-card px-4 py-3 pr-16 text-lg font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-foreground/20 disabled:opacity-50"
+              className="w-full rounded-xl border border-input-border bg-input-bg px-4 py-3 pr-16 text-lg font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:opacity-50"
             />
             <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">
               {symbol || "—"}
@@ -573,7 +573,7 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
           {parsedQty > 0 &&
             oraclePrice !== null &&
             collateralCost > collateralBalance && (
-              <p className="text-xs text-red-500">
+              <p className="text-xs text-short">
                 Exceeds available collateral
               </p>
             )}
@@ -583,13 +583,13 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
         </div>
 
         {/* Order summary */}
-        <div className="space-y-2 rounded-xl border border-border-low bg-cream/20 px-4 py-3 text-sm">
+        <div className="space-y-2 rounded-xl border border-border-low bg-surface px-4 py-3 text-sm">
           <SummaryRow label="Direction">
             <span
               className={
                 direction === PositionDirection.Long
-                  ? "font-semibold text-green-600"
-                  : "font-semibold text-red-500"
+                  ? "font-semibold text-long"
+                  : "font-semibold text-short"
               }
             >
               {direction === PositionDirection.Long ? "Long" : "Short"}
@@ -611,8 +611,8 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
           disabled={isSubmitting || !sizeValid}
           className={`w-full rounded-xl px-4 py-3 text-sm font-semibold transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${
             direction === PositionDirection.Long
-              ? "bg-green-500 text-white"
-              : "bg-red-500 text-white"
+              ? "bg-long text-background"
+              : "bg-short text-background"
           }`}
         >
           {isSubmitting
