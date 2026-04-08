@@ -55,7 +55,7 @@ function formatPnl(amount: bigint): string {
  * @returns Tailwind class string for green (profit) or red (loss).
  */
 function pnlColorClass(amount: bigint): string {
-  return amount >= 0n ? "text-green-600" : "text-red-500";
+  return amount >= 0n ? "text-long" : "text-short";
 }
 
 
@@ -99,7 +99,7 @@ export function PositionsTable() {
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
+    <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_2px_8px_-2px_rgba(0,0,0,0.4)]">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border-low px-6 py-4">
         <div>
@@ -120,7 +120,7 @@ export function PositionsTable() {
           {[...Array(2)].map((_, i) => (
             <div
               key={i}
-              className="h-14 animate-pulse rounded-xl bg-cream/50"
+              className="h-14 animate-pulse rounded-xl bg-surface"
             />
           ))}
         </div>
@@ -129,8 +129,8 @@ export function PositionsTable() {
       {/* Error */}
       {!isLoading && error && (
         <div className="px-6 py-4">
-          <div className="rounded-xl border border-red-500/20 bg-red-50/50 px-4 py-3 text-sm">
-            <p className="text-red-600">{error.message}</p>
+          <div className="rounded-xl border border-short/20 bg-short-muted px-4 py-3 text-sm">
+            <p className="text-short">{error.message}</p>
           </div>
         </div>
       )}
@@ -231,7 +231,7 @@ function PositionRow({
     : "bg-gray-500/15 text-gray-500";
 
   return (
-    <tr className="transition-colors hover:bg-cream/40">
+    <tr className="transition-colors hover:bg-surface">
       {/* Market + direction */}
       <td className="py-3.5 pl-6 pr-4">
         <div className="flex items-center gap-2.5">
@@ -245,8 +245,8 @@ function PositionRow({
             <span
               className={`mt-0.5 inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-semibold ${
                 isLong
-                  ? "bg-green-500/10 text-green-600"
-                  : "bg-red-500/10 text-red-500"
+                  ? "bg-long-muted text-long"
+                  : "bg-short-muted text-short"
               }`}
             >
               {isLong ? "Long" : "Short"}
@@ -281,9 +281,9 @@ function PositionRow({
           <span
             className={
               currentPrice > position.entryPrice
-                ? "text-green-600"
+                ? "text-long"
                 : currentPrice < position.entryPrice
-                  ? "text-red-500"
+                  ? "text-short"
                   : ""
             }
           >
@@ -321,7 +321,7 @@ function PositionRow({
         <button
           onClick={() => closePosition(position.perpsMarket as Address)}
           disabled={isClosing}
-          className="rounded-lg border border-border-low bg-card px-3 py-1.5 text-xs font-medium text-muted transition hover:-translate-y-0.5 hover:text-foreground hover:shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          className="rounded-lg border border-border-low bg-surface px-3 py-1.5 text-xs font-medium text-muted transition hover:text-foreground hover:border-border-strong hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isClosing ? "Closing…" : "Close"}
         </button>

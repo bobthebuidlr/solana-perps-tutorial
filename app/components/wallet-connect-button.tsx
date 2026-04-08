@@ -11,9 +11,9 @@ export function WalletConnectButton() {
     return (
       <button
         onClick={() => disconnect()}
-        className="inline-flex items-center gap-2 rounded-lg border border-border-low bg-card px-3 py-2 text-sm font-medium transition hover:-translate-y-0.5 hover:shadow-sm cursor-pointer"
+        className="inline-flex items-center gap-2 rounded-lg border border-border-low bg-surface px-3 py-2 text-sm font-medium transition hover:border-border-strong hover:bg-surface-hover cursor-pointer"
       >
-        <span className="h-2 w-2 rounded-full bg-green-500" />
+        <span className="h-2 w-2 rounded-full bg-long" />
         {addr.slice(0, 4)}…{addr.slice(-4)}
       </button>
     );
@@ -23,7 +23,7 @@ export function WalletConnectButton() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 rounded-lg border border-border-low bg-card px-3 py-2 text-sm font-medium transition hover:-translate-y-0.5 hover:shadow-sm cursor-pointer"
+        className="inline-flex items-center gap-2 rounded-lg border border-border-low bg-surface px-3 py-2 text-sm font-medium transition hover:border-border-strong hover:bg-surface-hover cursor-pointer"
       >
         Connect Wallet
       </button>
@@ -42,7 +42,7 @@ function WalletSelectDialog({ onClose }: { onClose: () => void }) {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm rounded-2xl border border-border-low bg-card p-6 shadow-xl"
+        className="w-full max-w-sm rounded-2xl border border-border-low bg-card-elevated p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
@@ -62,7 +62,7 @@ function WalletSelectDialog({ onClose }: { onClose: () => void }) {
               key={connector.id}
               onClick={() => connect(connector.id)}
               disabled={status === "connecting"}
-              className="group flex items-center justify-between rounded-xl border border-border-low bg-card px-4 py-3 text-left text-sm font-medium transition hover:-translate-y-0.5 hover:shadow-sm cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+              className="group flex items-center justify-between rounded-xl border border-border-low bg-surface px-4 py-3 text-left text-sm font-medium transition hover:border-border-strong hover:bg-surface-hover cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span className="flex flex-col">
                 <span className="text-base">{connector.name}</span>

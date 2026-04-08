@@ -89,10 +89,10 @@ export function AccountOverview() {
 
   if (!walletAddress) {
     return (
-      <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
+      <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_2px_8px_-2px_rgba(0,0,0,0.4)]">
         <div className="p-6">
           <p className="text-sm font-semibold mb-4">Account Overview</p>
-          <div className="rounded-xl bg-cream/30 px-4 py-8 text-center text-sm text-muted">
+          <div className="rounded-xl bg-surface px-4 py-8 text-center text-sm text-muted">
             Connect your wallet to view account details
           </div>
         </div>
@@ -103,7 +103,7 @@ export function AccountOverview() {
   const isLoading = collateralLoading || positionsLoading;
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
+    <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_2px_8px_-2px_rgba(0,0,0,0.4)]">
       <div className="p-6">
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
@@ -117,14 +117,14 @@ export function AccountOverview() {
             <button
               onClick={() => setDepositOpen(true)}
               disabled={isLoading}
-              className="rounded-lg bg-foreground px-3 py-1.5 text-xs font-medium text-background transition hover:opacity-90 disabled:opacity-50"
+              className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white transition hover:bg-primary-hover disabled:opacity-50"
             >
               Deposit
             </button>
             <button
               onClick={() => setWithdrawOpen(true)}
               disabled={isLoading || collateralBalance <= 0n}
-              className="rounded-lg border border-border-low bg-card px-3 py-1.5 text-xs font-medium text-muted transition hover:-translate-y-0.5 hover:text-foreground hover:shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-lg border border-border-low bg-surface px-3 py-1.5 text-xs font-medium text-muted transition hover:text-foreground hover:border-border-strong hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Withdraw
             </button>
@@ -137,7 +137,7 @@ export function AccountOverview() {
             <span className="text-sm text-muted">Portfolio Value</span>
             <span className="font-mono text-sm font-semibold tabular-nums">
               {isLoading ? (
-                <span className="inline-block h-4 w-20 animate-pulse rounded bg-cream/50" />
+                <span className="inline-block h-4 w-20 animate-pulse rounded bg-surface" />
               ) : (
                 `${formatUsdc(portfolioValue)} USDC`
               )}
@@ -149,14 +149,14 @@ export function AccountOverview() {
             <span
               className={`font-mono text-sm font-semibold tabular-nums ${
                 totalUnrealizedPnl > 0n
-                  ? "text-green-600"
+                  ? "text-long"
                   : totalUnrealizedPnl < 0n
-                    ? "text-red-500"
+                    ? "text-short"
                     : ""
               }`}
             >
               {isLoading ? (
-                <span className="inline-block h-4 w-20 animate-pulse rounded bg-cream/50" />
+                <span className="inline-block h-4 w-20 animate-pulse rounded bg-surface" />
               ) : (
                 `${totalUnrealizedPnl >= 0n ? "+" : "-"}${formatUsdc(totalUnrealizedPnl >= 0n ? totalUnrealizedPnl : -totalUnrealizedPnl)} USDC`
               )}
@@ -167,7 +167,7 @@ export function AccountOverview() {
             <span className="text-sm text-muted">Perps Maintenance Margin</span>
             <span className="font-mono text-sm font-semibold tabular-nums">
               {isLoading ? (
-                <span className="inline-block h-4 w-20 animate-pulse rounded bg-cream/50" />
+                <span className="inline-block h-4 w-20 animate-pulse rounded bg-surface" />
               ) : (
                 `${formatUsdc(totalMaintenanceMargin)} USDC`
               )}
@@ -178,7 +178,7 @@ export function AccountOverview() {
             <span className="text-sm text-muted">Account Leverage</span>
             <span className="font-mono text-sm font-semibold tabular-nums">
               {isLoading ? (
-                <span className="inline-block h-4 w-20 animate-pulse rounded bg-cream/50" />
+                <span className="inline-block h-4 w-20 animate-pulse rounded bg-surface" />
               ) : (
                 `${accountLeverage.toFixed(2)}x`
               )}
@@ -251,7 +251,7 @@ function DepositDialog({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm space-y-4 rounded-2xl border border-border-low bg-card p-6 shadow-xl"
+        className="w-full max-w-sm space-y-4 rounded-2xl border border-border-low bg-card-elevated p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
@@ -292,12 +292,12 @@ function DepositDialog({
             step="0.01"
             min="0"
             disabled={isLoading}
-            className="w-full rounded-xl border border-border-low bg-card px-4 py-3 text-lg font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-foreground/20 disabled:opacity-50"
+            className="w-full rounded-xl border border-input-border bg-input-bg px-4 py-3 text-lg font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:opacity-50"
           />
         </div>
 
         {walletBalance !== null && (
-          <div className="rounded-lg bg-cream/30 px-3 py-2 text-xs text-muted">
+          <div className="rounded-lg bg-surface px-3 py-2 text-xs text-muted">
             <span>Wallet Balance: </span>
             <span className="font-mono font-semibold text-foreground">
               {(Number(walletBalance) / 10 ** USDC_DECIMALS).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC
@@ -306,7 +306,7 @@ function DepositDialog({
         )}
 
         {error && (
-          <div className="rounded-lg border border-red-500/20 bg-red-50/50 px-3 py-2 text-xs text-red-600">
+          <div className="rounded-lg border border-short/20 bg-short-muted px-3 py-2 text-xs text-short">
             {error.message}
           </div>
         )}
@@ -314,7 +314,7 @@ function DepositDialog({
         <button
           onClick={handleDeposit}
           disabled={isLoading || !amount || parseFloat(amount) <= 0 || !userTokenAccount}
-          className="w-full rounded-xl bg-foreground px-4 py-2.5 text-sm font-semibold text-background transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isLoading ? "Depositing..." : "Deposit USDC"}
         </button>
@@ -366,7 +366,7 @@ function WithdrawDialog({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm space-y-4 rounded-2xl border border-border-low bg-card p-6 shadow-xl"
+        className="w-full max-w-sm space-y-4 rounded-2xl border border-border-low bg-card-elevated p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
@@ -406,11 +406,11 @@ function WithdrawDialog({
             min="0"
             max={maxAmountDisplay}
             disabled={isLoading}
-            className="w-full rounded-xl border border-border-low bg-card px-4 py-3 text-lg font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-foreground/20 disabled:opacity-50"
+            className="w-full rounded-xl border border-input-border bg-input-bg px-4 py-3 text-lg font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:opacity-50"
           />
         </div>
 
-        <div className="rounded-lg bg-cream/30 px-3 py-2 text-xs text-muted">
+        <div className="rounded-lg bg-surface px-3 py-2 text-xs text-muted">
           <span>Available Collateral: </span>
           <span className="font-mono font-semibold text-foreground">
             {maxAmountDisplay.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC
@@ -418,13 +418,13 @@ function WithdrawDialog({
         </div>
 
         {parseFloat(amount) > maxAmountDisplay && (
-          <div className="rounded-lg border border-yellow-500/20 bg-yellow-50/50 px-3 py-2 text-xs text-yellow-600">
+          <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-400">
             Amount exceeds available collateral
           </div>
         )}
 
         {error && (
-          <div className="rounded-lg border border-red-500/20 bg-red-50/50 px-3 py-2 text-xs text-red-600">
+          <div className="rounded-lg border border-short/20 bg-short-muted px-3 py-2 text-xs text-short">
             {error.message}
           </div>
         )}
@@ -432,7 +432,7 @@ function WithdrawDialog({
         <button
           onClick={handleWithdraw}
           disabled={isLoading || !amount || parseFloat(amount) <= 0 || parseFloat(amount) > maxAmountDisplay || !userTokenAccount}
-          className="w-full rounded-xl bg-foreground px-4 py-2.5 text-sm font-semibold text-background transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isLoading ? "Withdrawing..." : "Withdraw USDC"}
         </button>

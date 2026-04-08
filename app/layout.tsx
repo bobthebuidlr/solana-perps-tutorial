@@ -41,8 +41,8 @@ export default function RootLayout({
           className={`${inter.variable} ${geistMono.variable} antialiased`}
         >
           <div>
-            <nav className="flex justify-between items-center py-2 px-10 border-b">
-              <h1 className="text-2xl font-bold">Perps Dex</h1>
+            <nav className="flex justify-between items-center py-2 px-10 border-b border-border-low bg-card">
+              <h1 className="text-lg font-bold tracking-tight">Perps Dex</h1>
               <WalletConnectButton />
             </nav>
           </div>
