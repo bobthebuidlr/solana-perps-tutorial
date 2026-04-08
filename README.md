@@ -2,6 +2,12 @@
 
 A full-stack perpetual futures DEX on Solana, built as a hands-on tutorial for developers entering the Solana ecosystem.
 
+## What We're Building
+
+A protocol-owned perpetual futures exchange where the protocol itself acts as the counterparty to every trade. Users deposit USDC collateral into their own PDA-managed accounts, open leveraged long/short positions, and settle profits and losses directly against the protocol's counterparty vault.
+
+![Perps Platform Architecture](./assets/perps_architecture.png)
+
 ### What you'll learn
 
 - Designing an Anchor program with PDA-based account architecture
