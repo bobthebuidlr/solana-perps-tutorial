@@ -47,6 +47,7 @@ export type InitializeInstruction<
   TAccountAuthority extends string | AccountMeta<string> = string,
   TAccountMarkets extends string | AccountMeta<string> = string,
   TAccountOracle extends string | AccountMeta<string> = string,
+  TAccountConfig extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
   TAccountUsdcMint extends string | AccountMeta<string> = string,
   TAccountTokenProgram extends string | AccountMeta<string> =
@@ -68,6 +69,9 @@ export type InitializeInstruction<
       TAccountOracle extends string
         ? WritableAccount<TAccountOracle>
         : TAccountOracle,
+      TAccountConfig extends string
+        ? WritableAccount<TAccountConfig>
+        : TAccountConfig,
       TAccountVault extends string
         ? WritableAccount<TAccountVault>
         : TAccountVault,
@@ -115,6 +119,7 @@ export type InitializeAsyncInput<
   TAccountAuthority extends string = string,
   TAccountMarkets extends string = string,
   TAccountOracle extends string = string,
+  TAccountConfig extends string = string,
   TAccountVault extends string = string,
   TAccountUsdcMint extends string = string,
   TAccountTokenProgram extends string = string,
@@ -123,6 +128,8 @@ export type InitializeAsyncInput<
   authority: TransactionSigner<TAccountAuthority>;
   markets?: Address<TAccountMarkets>;
   oracle?: Address<TAccountOracle>;
+  /** Protocol config — stores the accepted USDC mint */
+  config?: Address<TAccountConfig>;
   vault?: Address<TAccountVault>;
   usdcMint: Address<TAccountUsdcMint>;
   tokenProgram?: Address<TAccountTokenProgram>;
@@ -133,6 +140,7 @@ export async function getInitializeInstructionAsync<
   TAccountAuthority extends string,
   TAccountMarkets extends string,
   TAccountOracle extends string,
+  TAccountConfig extends string,
   TAccountVault extends string,
   TAccountUsdcMint extends string,
   TAccountTokenProgram extends string,
@@ -143,6 +151,7 @@ export async function getInitializeInstructionAsync<
     TAccountAuthority,
     TAccountMarkets,
     TAccountOracle,
+    TAccountConfig,
     TAccountVault,
     TAccountUsdcMint,
     TAccountTokenProgram,
@@ -155,6 +164,7 @@ export async function getInitializeInstructionAsync<
     TAccountAuthority,
     TAccountMarkets,
     TAccountOracle,
+    TAccountConfig,
     TAccountVault,
     TAccountUsdcMint,
     TAccountTokenProgram,
@@ -169,6 +179,7 @@ export async function getInitializeInstructionAsync<
     authority: { value: input.authority ?? null, isWritable: true },
     markets: { value: input.markets ?? null, isWritable: true },
     oracle: { value: input.oracle ?? null, isWritable: true },
+    config: { value: input.config ?? null, isWritable: true },
     vault: { value: input.vault ?? null, isWritable: true },
     usdcMint: { value: input.usdcMint ?? null, isWritable: false },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
@@ -198,6 +209,14 @@ export async function getInitializeInstructionAsync<
       ],
     });
   }
+  if (!accounts.config.value) {
+    accounts.config.value = await getProgramDerivedAddress({
+      programAddress,
+      seeds: [
+        getBytesEncoder().encode(new Uint8Array([99, 111, 110, 102, 105, 103])),
+      ],
+    });
+  }
   if (!accounts.vault.value) {
     accounts.vault.value = await getProgramDerivedAddress({
       programAddress,
@@ -221,6 +240,7 @@ export async function getInitializeInstructionAsync<
       getAccountMeta(accounts.authority),
       getAccountMeta(accounts.markets),
       getAccountMeta(accounts.oracle),
+      getAccountMeta(accounts.config),
       getAccountMeta(accounts.vault),
       getAccountMeta(accounts.usdcMint),
       getAccountMeta(accounts.tokenProgram),
@@ -233,6 +253,7 @@ export async function getInitializeInstructionAsync<
     TAccountAuthority,
     TAccountMarkets,
     TAccountOracle,
+    TAccountConfig,
     TAccountVault,
     TAccountUsdcMint,
     TAccountTokenProgram,
@@ -244,6 +265,7 @@ export type InitializeInput<
   TAccountAuthority extends string = string,
   TAccountMarkets extends string = string,
   TAccountOracle extends string = string,
+  TAccountConfig extends string = string,
   TAccountVault extends string = string,
   TAccountUsdcMint extends string = string,
   TAccountTokenProgram extends string = string,
@@ -252,6 +274,8 @@ export type InitializeInput<
   authority: TransactionSigner<TAccountAuthority>;
   markets: Address<TAccountMarkets>;
   oracle: Address<TAccountOracle>;
+  /** Protocol config — stores the accepted USDC mint */
+  config: Address<TAccountConfig>;
   vault: Address<TAccountVault>;
   usdcMint: Address<TAccountUsdcMint>;
   tokenProgram?: Address<TAccountTokenProgram>;
@@ -262,6 +286,7 @@ export function getInitializeInstruction<
   TAccountAuthority extends string,
   TAccountMarkets extends string,
   TAccountOracle extends string,
+  TAccountConfig extends string,
   TAccountVault extends string,
   TAccountUsdcMint extends string,
   TAccountTokenProgram extends string,
@@ -272,6 +297,7 @@ export function getInitializeInstruction<
     TAccountAuthority,
     TAccountMarkets,
     TAccountOracle,
+    TAccountConfig,
     TAccountVault,
     TAccountUsdcMint,
     TAccountTokenProgram,
@@ -283,6 +309,7 @@ export function getInitializeInstruction<
   TAccountAuthority,
   TAccountMarkets,
   TAccountOracle,
+  TAccountConfig,
   TAccountVault,
   TAccountUsdcMint,
   TAccountTokenProgram,
@@ -296,6 +323,7 @@ export function getInitializeInstruction<
     authority: { value: input.authority ?? null, isWritable: true },
     markets: { value: input.markets ?? null, isWritable: true },
     oracle: { value: input.oracle ?? null, isWritable: true },
+    config: { value: input.config ?? null, isWritable: true },
     vault: { value: input.vault ?? null, isWritable: true },
     usdcMint: { value: input.usdcMint ?? null, isWritable: false },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
@@ -322,6 +350,7 @@ export function getInitializeInstruction<
       getAccountMeta(accounts.authority),
       getAccountMeta(accounts.markets),
       getAccountMeta(accounts.oracle),
+      getAccountMeta(accounts.config),
       getAccountMeta(accounts.vault),
       getAccountMeta(accounts.usdcMint),
       getAccountMeta(accounts.tokenProgram),
@@ -334,6 +363,7 @@ export function getInitializeInstruction<
     TAccountAuthority,
     TAccountMarkets,
     TAccountOracle,
+    TAccountConfig,
     TAccountVault,
     TAccountUsdcMint,
     TAccountTokenProgram,
@@ -350,10 +380,12 @@ export type ParsedInitializeInstruction<
     authority: TAccountMetas[0];
     markets: TAccountMetas[1];
     oracle: TAccountMetas[2];
-    vault: TAccountMetas[3];
-    usdcMint: TAccountMetas[4];
-    tokenProgram: TAccountMetas[5];
-    systemProgram: TAccountMetas[6];
+    /** Protocol config — stores the accepted USDC mint */
+    config: TAccountMetas[3];
+    vault: TAccountMetas[4];
+    usdcMint: TAccountMetas[5];
+    tokenProgram: TAccountMetas[6];
+    systemProgram: TAccountMetas[7];
   };
   data: InitializeInstructionData;
 };
@@ -366,7 +398,7 @@ export function parseInitializeInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedInitializeInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 7) {
+  if (instruction.accounts.length < 8) {
     // TODO: Coded error.
     throw new Error("Not enough accounts");
   }
@@ -382,6 +414,7 @@ export function parseInitializeInstruction<
       authority: getNextAccount(),
       markets: getNextAccount(),
       oracle: getNextAccount(),
+      config: getNextAccount(),
       vault: getNextAccount(),
       usdcMint: getNextAccount(),
       tokenProgram: getNextAccount(),

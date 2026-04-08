@@ -17,6 +17,8 @@ import {
   getProgramDerivedAddress,
   getStructDecoder,
   getStructEncoder,
+  getU64Decoder,
+  getU64Encoder,
   transformEncoder,
   type AccountMeta,
   type AccountSignerMeta,
@@ -40,18 +42,24 @@ import {
   getAccountMetaFactory,
   type ResolvedAccount,
 } from "../shared";
+import {
+  getPositionDirectionDecoder,
+  getPositionDirectionEncoder,
+  type PositionDirection,
+  type PositionDirectionArgs,
+} from "../types";
 
-export const CLOSE_POSITION_DISCRIMINATOR = new Uint8Array([
-  123, 134, 81, 0, 49, 68, 98, 98,
+export const UPDATE_POSITION_DISCRIMINATOR = new Uint8Array([
+  102, 75, 42, 126, 57, 196, 156, 9,
 ]);
 
-export function getClosePositionDiscriminatorBytes() {
+export function getUpdatePositionDiscriminatorBytes() {
   return fixEncoderSize(getBytesEncoder(), 8).encode(
-    CLOSE_POSITION_DISCRIMINATOR,
+    UPDATE_POSITION_DISCRIMINATOR,
   );
 }
 
-export type ClosePositionInstruction<
+export type UpdatePositionInstruction<
   TProgram extends string = typeof PERPS_PROGRAM_ADDRESS,
   TAccountUser extends string | AccountMeta<string> = string,
   TAccountUserAccount extends string | AccountMeta<string> = string,
@@ -100,41 +108,55 @@ export type ClosePositionInstruction<
     ]
   >;
 
-export type ClosePositionInstructionData = {
+export type UpdatePositionInstructionData = {
   discriminator: ReadonlyUint8Array;
   tokenMint: Address;
+  direction: PositionDirection;
+  size: bigint;
+  leverage: bigint;
 };
 
-export type ClosePositionInstructionDataArgs = { tokenMint: Address };
+export type UpdatePositionInstructionDataArgs = {
+  tokenMint: Address;
+  direction: PositionDirectionArgs;
+  size: number | bigint;
+  leverage: number | bigint;
+};
 
-export function getClosePositionInstructionDataEncoder(): FixedSizeEncoder<ClosePositionInstructionDataArgs> {
+export function getUpdatePositionInstructionDataEncoder(): FixedSizeEncoder<UpdatePositionInstructionDataArgs> {
   return transformEncoder(
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
       ["tokenMint", getAddressEncoder()],
+      ["direction", getPositionDirectionEncoder()],
+      ["size", getU64Encoder()],
+      ["leverage", getU64Encoder()],
     ]),
-    (value) => ({ ...value, discriminator: CLOSE_POSITION_DISCRIMINATOR }),
+    (value) => ({ ...value, discriminator: UPDATE_POSITION_DISCRIMINATOR }),
   );
 }
 
-export function getClosePositionInstructionDataDecoder(): FixedSizeDecoder<ClosePositionInstructionData> {
+export function getUpdatePositionInstructionDataDecoder(): FixedSizeDecoder<UpdatePositionInstructionData> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
     ["tokenMint", getAddressDecoder()],
+    ["direction", getPositionDirectionDecoder()],
+    ["size", getU64Decoder()],
+    ["leverage", getU64Decoder()],
   ]);
 }
 
-export function getClosePositionInstructionDataCodec(): FixedSizeCodec<
-  ClosePositionInstructionDataArgs,
-  ClosePositionInstructionData
+export function getUpdatePositionInstructionDataCodec(): FixedSizeCodec<
+  UpdatePositionInstructionDataArgs,
+  UpdatePositionInstructionData
 > {
   return combineCodec(
-    getClosePositionInstructionDataEncoder(),
-    getClosePositionInstructionDataDecoder(),
+    getUpdatePositionInstructionDataEncoder(),
+    getUpdatePositionInstructionDataDecoder(),
   );
 }
 
-export type ClosePositionAsyncInput<
+export type UpdatePositionAsyncInput<
   TAccountUser extends string = string,
   TAccountUserAccount extends string = string,
   TAccountPosition extends string = string,
@@ -145,13 +167,12 @@ export type ClosePositionAsyncInput<
   TAccountVault extends string = string,
   TAccountTokenProgram extends string = string,
 > = {
-  /** User closing the position */
+  /** User updating the position */
   user: TransactionSigner<TAccountUser>;
-  /** User collateral account */
+  /** User account PDA */
   userAccount?: Address<TAccountUserAccount>;
-  /** Position being closed — rent returned to user on close */
+  /** Existing position being updated */
   position?: Address<TAccountPosition>;
-  /** Markets account — updated to adjust OI */
   markets: Address<TAccountMarkets>;
   oracle: Address<TAccountOracle>;
   /** Protocol config — validates accepted USDC mint */
@@ -161,10 +182,13 @@ export type ClosePositionAsyncInput<
   /** Vault (LP pool) token account */
   vault?: Address<TAccountVault>;
   tokenProgram?: Address<TAccountTokenProgram>;
-  tokenMint: ClosePositionInstructionDataArgs["tokenMint"];
+  tokenMint: UpdatePositionInstructionDataArgs["tokenMint"];
+  direction: UpdatePositionInstructionDataArgs["direction"];
+  size: UpdatePositionInstructionDataArgs["size"];
+  leverage: UpdatePositionInstructionDataArgs["leverage"];
 };
 
-export async function getClosePositionInstructionAsync<
+export async function getUpdatePositionInstructionAsync<
   TAccountUser extends string,
   TAccountUserAccount extends string,
   TAccountPosition extends string,
@@ -176,7 +200,7 @@ export async function getClosePositionInstructionAsync<
   TAccountTokenProgram extends string,
   TProgramAddress extends Address = typeof PERPS_PROGRAM_ADDRESS,
 >(
-  input: ClosePositionAsyncInput<
+  input: UpdatePositionAsyncInput<
     TAccountUser,
     TAccountUserAccount,
     TAccountPosition,
@@ -189,7 +213,7 @@ export async function getClosePositionInstructionAsync<
   >,
   config?: { programAddress?: TProgramAddress },
 ): Promise<
-  ClosePositionInstruction<
+  UpdatePositionInstruction<
     TProgramAddress,
     TAccountUser,
     TAccountUserAccount,
@@ -298,11 +322,11 @@ export async function getClosePositionInstructionAsync<
       getAccountMeta(accounts.vault),
       getAccountMeta(accounts.tokenProgram),
     ],
-    data: getClosePositionInstructionDataEncoder().encode(
-      args as ClosePositionInstructionDataArgs,
+    data: getUpdatePositionInstructionDataEncoder().encode(
+      args as UpdatePositionInstructionDataArgs,
     ),
     programAddress,
-  } as ClosePositionInstruction<
+  } as UpdatePositionInstruction<
     TProgramAddress,
     TAccountUser,
     TAccountUserAccount,
@@ -316,7 +340,7 @@ export async function getClosePositionInstructionAsync<
   >);
 }
 
-export type ClosePositionInput<
+export type UpdatePositionInput<
   TAccountUser extends string = string,
   TAccountUserAccount extends string = string,
   TAccountPosition extends string = string,
@@ -327,13 +351,12 @@ export type ClosePositionInput<
   TAccountVault extends string = string,
   TAccountTokenProgram extends string = string,
 > = {
-  /** User closing the position */
+  /** User updating the position */
   user: TransactionSigner<TAccountUser>;
-  /** User collateral account */
+  /** User account PDA */
   userAccount: Address<TAccountUserAccount>;
-  /** Position being closed — rent returned to user on close */
+  /** Existing position being updated */
   position: Address<TAccountPosition>;
-  /** Markets account — updated to adjust OI */
   markets: Address<TAccountMarkets>;
   oracle: Address<TAccountOracle>;
   /** Protocol config — validates accepted USDC mint */
@@ -343,10 +366,13 @@ export type ClosePositionInput<
   /** Vault (LP pool) token account */
   vault: Address<TAccountVault>;
   tokenProgram?: Address<TAccountTokenProgram>;
-  tokenMint: ClosePositionInstructionDataArgs["tokenMint"];
+  tokenMint: UpdatePositionInstructionDataArgs["tokenMint"];
+  direction: UpdatePositionInstructionDataArgs["direction"];
+  size: UpdatePositionInstructionDataArgs["size"];
+  leverage: UpdatePositionInstructionDataArgs["leverage"];
 };
 
-export function getClosePositionInstruction<
+export function getUpdatePositionInstruction<
   TAccountUser extends string,
   TAccountUserAccount extends string,
   TAccountPosition extends string,
@@ -358,7 +384,7 @@ export function getClosePositionInstruction<
   TAccountTokenProgram extends string,
   TProgramAddress extends Address = typeof PERPS_PROGRAM_ADDRESS,
 >(
-  input: ClosePositionInput<
+  input: UpdatePositionInput<
     TAccountUser,
     TAccountUserAccount,
     TAccountPosition,
@@ -370,7 +396,7 @@ export function getClosePositionInstruction<
     TAccountTokenProgram
   >,
   config?: { programAddress?: TProgramAddress },
-): ClosePositionInstruction<
+): UpdatePositionInstruction<
   TProgramAddress,
   TAccountUser,
   TAccountUserAccount,
@@ -427,11 +453,11 @@ export function getClosePositionInstruction<
       getAccountMeta(accounts.vault),
       getAccountMeta(accounts.tokenProgram),
     ],
-    data: getClosePositionInstructionDataEncoder().encode(
-      args as ClosePositionInstructionDataArgs,
+    data: getUpdatePositionInstructionDataEncoder().encode(
+      args as UpdatePositionInstructionDataArgs,
     ),
     programAddress,
-  } as ClosePositionInstruction<
+  } as UpdatePositionInstruction<
     TProgramAddress,
     TAccountUser,
     TAccountUserAccount,
@@ -445,19 +471,18 @@ export function getClosePositionInstruction<
   >);
 }
 
-export type ParsedClosePositionInstruction<
+export type ParsedUpdatePositionInstruction<
   TProgram extends string = typeof PERPS_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
   programAddress: Address<TProgram>;
   accounts: {
-    /** User closing the position */
+    /** User updating the position */
     user: TAccountMetas[0];
-    /** User collateral account */
+    /** User account PDA */
     userAccount: TAccountMetas[1];
-    /** Position being closed — rent returned to user on close */
+    /** Existing position being updated */
     position: TAccountMetas[2];
-    /** Markets account — updated to adjust OI */
     markets: TAccountMetas[3];
     oracle: TAccountMetas[4];
     /** Protocol config — validates accepted USDC mint */
@@ -468,17 +493,17 @@ export type ParsedClosePositionInstruction<
     vault: TAccountMetas[7];
     tokenProgram: TAccountMetas[8];
   };
-  data: ClosePositionInstructionData;
+  data: UpdatePositionInstructionData;
 };
 
-export function parseClosePositionInstruction<
+export function parseUpdatePositionInstruction<
   TProgram extends string,
   TAccountMetas extends readonly AccountMeta[],
 >(
   instruction: Instruction<TProgram> &
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
-): ParsedClosePositionInstruction<TProgram, TAccountMetas> {
+): ParsedUpdatePositionInstruction<TProgram, TAccountMetas> {
   if (instruction.accounts.length < 9) {
     // TODO: Coded error.
     throw new Error("Not enough accounts");
@@ -502,6 +527,6 @@ export function parseClosePositionInstruction<
       vault: getNextAccount(),
       tokenProgram: getNextAccount(),
     },
-    data: getClosePositionInstructionDataDecoder().decode(instruction.data),
+    data: getUpdatePositionInstructionDataDecoder().decode(instruction.data),
   };
 }

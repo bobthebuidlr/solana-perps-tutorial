@@ -24,6 +24,7 @@ import {
   parseOpenPositionInstruction,
   parseUpdateFundingInstruction,
   parseUpdateOracleInstruction,
+  parseUpdatePositionInstruction,
   parseViewPositionPnlInstruction,
   parseWithdrawCollateralInstruction,
   type ParsedClosePositionInstruction,
@@ -33,6 +34,7 @@ import {
   type ParsedOpenPositionInstruction,
   type ParsedUpdateFundingInstruction,
   type ParsedUpdateOracleInstruction,
+  type ParsedUpdatePositionInstruction,
   type ParsedViewPositionPnlInstruction,
   type ParsedWithdrawCollateralInstruction,
 } from "../instructions";
@@ -44,6 +46,7 @@ export enum PerpsAccount {
   Markets,
   Oracle,
   Position,
+  ProtocolConfig,
   UserAccount,
 }
 
@@ -88,6 +91,17 @@ export function identifyPerpsAccount(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([207, 91, 250, 28, 152, 179, 215, 209]),
+      ),
+      0,
+    )
+  ) {
+    return PerpsAccount.ProtocolConfig;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([211, 33, 136, 16, 186, 110, 242, 127]),
       ),
       0,
@@ -108,6 +122,7 @@ export enum PerpsInstruction {
   OpenPosition,
   UpdateFunding,
   UpdateOracle,
+  UpdatePosition,
   ViewPositionPnl,
   WithdrawCollateral,
 }
@@ -197,6 +212,17 @@ export function identifyPerpsInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([102, 75, 42, 126, 57, 196, 156, 9]),
+      ),
+      0,
+    )
+  ) {
+    return PerpsInstruction.UpdatePosition;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([145, 87, 174, 186, 13, 68, 130, 111]),
       ),
       0,
@@ -244,6 +270,9 @@ export type ParsedPerpsInstruction<
   | ({
       instructionType: PerpsInstruction.UpdateOracle;
     } & ParsedUpdateOracleInstruction<TProgram>)
+  | ({
+      instructionType: PerpsInstruction.UpdatePosition;
+    } & ParsedUpdatePositionInstruction<TProgram>)
   | ({
       instructionType: PerpsInstruction.ViewPositionPnl;
     } & ParsedViewPositionPnlInstruction<TProgram>)
@@ -303,6 +332,13 @@ export function parsePerpsInstruction<TProgram extends string>(
       return {
         instructionType: PerpsInstruction.UpdateOracle,
         ...parseUpdateOracleInstruction(instruction),
+      };
+    }
+    case PerpsInstruction.UpdatePosition: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: PerpsInstruction.UpdatePosition,
+        ...parseUpdatePositionInstruction(instruction),
       };
     }
     case PerpsInstruction.ViewPositionPnl: {

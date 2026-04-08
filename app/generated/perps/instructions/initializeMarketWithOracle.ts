@@ -142,6 +142,8 @@ export type InitializeMarketWithOracleInput<
   token: InitializeMarketWithOracleInstructionDataArgs["token"];
   name: InitializeMarketWithOracleInstructionDataArgs["name"];
   price: InitializeMarketWithOracleInstructionDataArgs["price"];
+  maxLeverage: InitializeMarketWithOracleInstructionDataArgs["maxLeverage"];
+  maintenanceMarginRatio: InitializeMarketWithOracleInstructionDataArgs["maintenanceMarginRatio"];
 };
 
 export function getInitializeMarketWithOracleInstruction<

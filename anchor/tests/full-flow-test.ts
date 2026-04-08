@@ -981,6 +981,222 @@ describe("Full Flow Test", () => {
     });
   });
 
+  describe("Step 9: Update Position", () => {
+    it("should update a LONG position (same direction) and realize PnL", async () => {
+      console.log("\n🚀 Step 9a: Update position same direction (LONG→LONG)...");
+
+      // Set oracle to $100 and open a 5 SOL LONG at 5x leverage
+      await program.methods
+        .updateOracle(SOL_MINT, INITIAL_PRICE)
+        .accounts({ oracle: oraclePda })
+        .rpc();
+
+      await program.methods
+        .openPosition(SOL_MINT, { long: {} }, POSITION_SIZE, LEVERAGE_5X)
+        .accounts({
+          user: wallet.publicKey,
+          markets: marketsPda,
+          oracle: oraclePda,
+          userCollateralTokenAccount: userCollateralPda,
+        })
+        .rpc();
+      console.log("Opened 5-SOL LONG at $100 (5x leverage)");
+
+      // Move price to $120 — unrealized PnL = 5 * ($120 - $100) = $100
+      const UPDATE_PRICE = new BN(120_000_000);
+      await program.methods
+        .updateOracle(SOL_MINT, UPDATE_PRICE)
+        .accounts({ oracle: oraclePda })
+        .rpc();
+      console.log("Oracle updated to $120");
+
+      // Snapshot balances before update
+      const collateralBefore = await getAccount(connection, userCollateralPda);
+      const vaultBefore = await getAccount(connection, vaultPda);
+
+      // Update position: same direction, new size 3 SOL, 5x leverage
+      const NEW_SIZE = new BN(3_000_000); // 3 SOL
+      const tx = await program.methods
+        .updatePosition(SOL_MINT, { long: {} }, NEW_SIZE, LEVERAGE_5X)
+        .accounts({
+          user: wallet.publicKey,
+          markets: marketsPda,
+          oracle: oraclePda,
+          config: configPda,
+          userCollateralTokenAccount: userCollateralPda,
+          vault: vaultPda,
+        })
+        .rpc();
+      console.log("Updated position to 3-SOL LONG. TX:", tx);
+
+      // Verify PnL was realized — profit should have moved from vault to user
+      const collateralAfter = await getAccount(connection, userCollateralPda);
+      const vaultAfter = await getAccount(connection, vaultPda);
+
+      const userDelta = collateralAfter.amount - collateralBefore.amount;
+      const vaultDelta = vaultBefore.amount - vaultAfter.amount;
+      console.log("User collateral change:", Number(userDelta) / 1_000_000, "USDC");
+      console.log("Vault change:", Number(vaultDelta) / 1_000_000, "USDC");
+
+      // Profit of $100 should have been transferred
+      assert.equal(userDelta.toString(), "100000000", "User should receive $100 profit");
+      assert.equal(vaultDelta.toString(), "100000000", "Vault should pay $100 profit");
+
+      // Verify position was reset with new params
+      const position = await program.account.position.fetch(positionPda);
+      assert.isDefined(position.direction.long, "Direction should still be LONG");
+      assert.equal(
+        position.positionSize.toString(),
+        NEW_SIZE.toString(),
+        "Size should be updated to 3 SOL"
+      );
+      assert.equal(
+        position.entryPrice.toString(),
+        UPDATE_PRICE.toString(),
+        "Entry price should be reset to current oracle price ($120)"
+      );
+
+      // New collateral: 3 SOL * $120 / 5x = $72
+      const expectedNewCollateral = 72_000_000;
+      assert.equal(
+        position.collateral.toNumber(),
+        expectedNewCollateral,
+        "Collateral should be recalculated for new position"
+      );
+
+      // Verify OI was updated
+      const marketsAccount = await program.account.markets.fetch(marketsPda);
+      const market = marketsAccount.perps.find(
+        (m) => m.tokenMint.toString() === SOL_MINT.toString()
+      );
+      const expectedOi = 360_000_000; // 3 SOL * $120 = $360
+      assert.equal(
+        market.totalLongOi.toString(),
+        expectedOi.toString(),
+        "Long OI should reflect new position notional ($360)"
+      );
+
+      console.log("✓ Same-direction update verified (PnL realized, position reset)");
+
+      // Clean up
+      await program.methods
+        .closePosition(SOL_MINT)
+        .accounts({
+          user: wallet.publicKey,
+          markets: marketsPda,
+          oracle: oraclePda,
+          config: configPda,
+          userCollateralTokenAccount: userCollateralPda,
+          vault: vaultPda,
+        })
+        .rpc();
+      console.log("✓ Cleanup: position closed");
+    });
+
+    it("should flip direction (LONG→SHORT) and realize PnL", async () => {
+      console.log("\n🚀 Step 9b: Update position flip direction (LONG→SHORT)...");
+
+      // Set oracle to $100 and open a 2 SOL LONG at 5x leverage
+      await program.methods
+        .updateOracle(SOL_MINT, INITIAL_PRICE)
+        .accounts({ oracle: oraclePda })
+        .rpc();
+
+      const SIZE_2SOL = new BN(2_000_000);
+      await program.methods
+        .openPosition(SOL_MINT, { long: {} }, SIZE_2SOL, LEVERAGE_5X)
+        .accounts({
+          user: wallet.publicKey,
+          markets: marketsPda,
+          oracle: oraclePda,
+          userCollateralTokenAccount: userCollateralPda,
+        })
+        .rpc();
+      console.log("Opened 2-SOL LONG at $100 (5x leverage)");
+
+      // Move price to $90 — unrealized PnL = 2 * ($90 - $100) = -$20 loss
+      const FLIP_PRICE = new BN(90_000_000);
+      await program.methods
+        .updateOracle(SOL_MINT, FLIP_PRICE)
+        .accounts({ oracle: oraclePda })
+        .rpc();
+      console.log("Oracle updated to $90");
+
+      // Snapshot balances
+      const collateralBefore = await getAccount(connection, userCollateralPda);
+      const vaultBefore = await getAccount(connection, vaultPda);
+
+      // Flip to SHORT, 4 SOL at 5x
+      const SIZE_4SOL = new BN(4_000_000);
+      const tx = await program.methods
+        .updatePosition(SOL_MINT, { short: {} }, SIZE_4SOL, LEVERAGE_5X)
+        .accounts({
+          user: wallet.publicKey,
+          markets: marketsPda,
+          oracle: oraclePda,
+          config: configPda,
+          userCollateralTokenAccount: userCollateralPda,
+          vault: vaultPda,
+        })
+        .rpc();
+      console.log("Flipped to 4-SOL SHORT. TX:", tx);
+
+      // Verify loss was realized — $20 should move from user to vault
+      const collateralAfter = await getAccount(connection, userCollateralPda);
+      const vaultAfter = await getAccount(connection, vaultPda);
+
+      const userDelta = collateralBefore.amount - collateralAfter.amount;
+      const vaultDelta = vaultAfter.amount - vaultBefore.amount;
+      console.log("User collateral loss:", Number(userDelta) / 1_000_000, "USDC");
+
+      assert.equal(userDelta.toString(), "20000000", "User should lose $20");
+      assert.equal(vaultDelta.toString(), "20000000", "Vault should gain $20");
+
+      // Verify position is now SHORT
+      const position = await program.account.position.fetch(positionPda);
+      assert.isDefined(position.direction.short, "Direction should be SHORT");
+      assert.equal(
+        position.positionSize.toString(),
+        SIZE_4SOL.toString(),
+        "Size should be 4 SOL"
+      );
+      assert.equal(
+        position.entryPrice.toString(),
+        FLIP_PRICE.toString(),
+        "Entry price should be $90"
+      );
+
+      // Verify OI: old long OI removed, new short OI added
+      const marketsAccount = await program.account.markets.fetch(marketsPda);
+      const market = marketsAccount.perps.find(
+        (m) => m.tokenMint.toString() === SOL_MINT.toString()
+      );
+      assert.equal(market.totalLongOi.toString(), "0", "Long OI should be 0 after flip");
+      const expectedShortOi = 360_000_000; // 4 SOL * $90 = $360
+      assert.equal(
+        market.totalShortOi.toString(),
+        expectedShortOi.toString(),
+        "Short OI should reflect new position"
+      );
+
+      console.log("✓ Direction flip verified (LONG→SHORT, loss realized)");
+
+      // Clean up
+      await program.methods
+        .closePosition(SOL_MINT)
+        .accounts({
+          user: wallet.publicKey,
+          markets: marketsPda,
+          oracle: oraclePda,
+          config: configPda,
+          userCollateralTokenAccount: userCollateralPda,
+          vault: vaultPda,
+        })
+        .rpc();
+      console.log("✓ Cleanup: position closed");
+    });
+  });
+
   describe("Verification", () => {
     it("should verify the complete state after all operations", async () => {
       console.log("\n🔍 Final Verification:");

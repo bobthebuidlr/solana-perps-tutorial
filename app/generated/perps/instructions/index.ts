@@ -13,5 +13,6 @@ export * from "./initializeMarketWithOracle";
 export * from "./openPosition";
 export * from "./updateFunding";
 export * from "./updateOracle";
+export * from "./updatePosition";
 export * from "./viewPositionPnl";
 export * from "./withdrawCollateral";

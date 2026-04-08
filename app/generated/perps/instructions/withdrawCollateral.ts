@@ -55,6 +55,7 @@ export type WithdrawCollateralInstruction<
   TProgram extends string = typeof PERPS_PROGRAM_ADDRESS,
   TAccountUser extends string | AccountMeta<string> = string,
   TAccountUserAccount extends string | AccountMeta<string> = string,
+  TAccountConfig extends string | AccountMeta<string> = string,
   TAccountUserCollateralTokenAccount extends string | AccountMeta<string> =
     string,
   TAccountUserTokenAccount extends string | AccountMeta<string> = string,
@@ -73,6 +74,9 @@ export type WithdrawCollateralInstruction<
       TAccountUserAccount extends string
         ? WritableAccount<TAccountUserAccount>
         : TAccountUserAccount,
+      TAccountConfig extends string
+        ? ReadonlyAccount<TAccountConfig>
+        : TAccountConfig,
       TAccountUserCollateralTokenAccount extends string
         ? WritableAccount<TAccountUserCollateralTokenAccount>
         : TAccountUserCollateralTokenAccount,
@@ -129,18 +133,27 @@ export function getWithdrawCollateralInstructionDataCodec(): FixedSizeCodec<
 export type WithdrawCollateralAsyncInput<
   TAccountUser extends string = string,
   TAccountUserAccount extends string = string,
+  TAccountConfig extends string = string,
   TAccountUserCollateralTokenAccount extends string = string,
   TAccountUserTokenAccount extends string = string,
+  TAccountMarkets extends string = string,
+  TAccountOracle extends string = string,
   TAccountTokenProgram extends string = string,
 > = {
   /** User withdrawing collateral */
   user: TransactionSigner<TAccountUser>;
   /** User collateral account */
   userAccount?: Address<TAccountUserAccount>;
+  /** Protocol config — validates accepted USDC mint */
+  config?: Address<TAccountConfig>;
   /** Per-user collateral token account PDA — signs outbound transfers */
   userCollateralTokenAccount?: Address<TAccountUserCollateralTokenAccount>;
   /** User's USDC token account to receive the withdrawn collateral */
   userTokenAccount: Address<TAccountUserTokenAccount>;
+  /** Markets account — needed for maintenance margin ratios */
+  markets: Address<TAccountMarkets>;
+  /** Oracle account — needed for current prices */
+  oracle: Address<TAccountOracle>;
   tokenProgram?: Address<TAccountTokenProgram>;
   amount: WithdrawCollateralInstructionDataArgs["amount"];
 };
@@ -148,16 +161,22 @@ export type WithdrawCollateralAsyncInput<
 export async function getWithdrawCollateralInstructionAsync<
   TAccountUser extends string,
   TAccountUserAccount extends string,
+  TAccountConfig extends string,
   TAccountUserCollateralTokenAccount extends string,
   TAccountUserTokenAccount extends string,
+  TAccountMarkets extends string,
+  TAccountOracle extends string,
   TAccountTokenProgram extends string,
   TProgramAddress extends Address = typeof PERPS_PROGRAM_ADDRESS,
 >(
   input: WithdrawCollateralAsyncInput<
     TAccountUser,
     TAccountUserAccount,
+    TAccountConfig,
     TAccountUserCollateralTokenAccount,
     TAccountUserTokenAccount,
+    TAccountMarkets,
+    TAccountOracle,
     TAccountTokenProgram
   >,
   config?: { programAddress?: TProgramAddress },
@@ -166,8 +185,11 @@ export async function getWithdrawCollateralInstructionAsync<
     TProgramAddress,
     TAccountUser,
     TAccountUserAccount,
+    TAccountConfig,
     TAccountUserCollateralTokenAccount,
     TAccountUserTokenAccount,
+    TAccountMarkets,
+    TAccountOracle,
     TAccountTokenProgram
   >
 > {
@@ -178,6 +200,7 @@ export async function getWithdrawCollateralInstructionAsync<
   const originalAccounts = {
     user: { value: input.user ?? null, isWritable: true },
     userAccount: { value: input.userAccount ?? null, isWritable: true },
+    config: { value: input.config ?? null, isWritable: false },
     userCollateralTokenAccount: {
       value: input.userCollateralTokenAccount ?? null,
       isWritable: true,
@@ -186,6 +209,8 @@ export async function getWithdrawCollateralInstructionAsync<
       value: input.userTokenAccount ?? null,
       isWritable: true,
     },
+    markets: { value: input.markets ?? null, isWritable: false },
+    oracle: { value: input.oracle ?? null, isWritable: false },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
@@ -203,6 +228,14 @@ export async function getWithdrawCollateralInstructionAsync<
       seeds: [
         getBytesEncoder().encode(new Uint8Array([117, 115, 101, 114])),
         getAddressEncoder().encode(expectAddress(accounts.user.value)),
+      ],
+    });
+  }
+  if (!accounts.config.value) {
+    accounts.config.value = await getProgramDerivedAddress({
+      programAddress,
+      seeds: [
+        getBytesEncoder().encode(new Uint8Array([99, 111, 110, 102, 105, 103])),
       ],
     });
   }
@@ -230,8 +263,11 @@ export async function getWithdrawCollateralInstructionAsync<
     accounts: [
       getAccountMeta(accounts.user),
       getAccountMeta(accounts.userAccount),
+      getAccountMeta(accounts.config),
       getAccountMeta(accounts.userCollateralTokenAccount),
       getAccountMeta(accounts.userTokenAccount),
+      getAccountMeta(accounts.markets),
+      getAccountMeta(accounts.oracle),
       getAccountMeta(accounts.tokenProgram),
     ],
     data: getWithdrawCollateralInstructionDataEncoder().encode(
@@ -242,8 +278,11 @@ export async function getWithdrawCollateralInstructionAsync<
     TProgramAddress,
     TAccountUser,
     TAccountUserAccount,
+    TAccountConfig,
     TAccountUserCollateralTokenAccount,
     TAccountUserTokenAccount,
+    TAccountMarkets,
+    TAccountOracle,
     TAccountTokenProgram
   >);
 }
@@ -251,18 +290,27 @@ export async function getWithdrawCollateralInstructionAsync<
 export type WithdrawCollateralInput<
   TAccountUser extends string = string,
   TAccountUserAccount extends string = string,
+  TAccountConfig extends string = string,
   TAccountUserCollateralTokenAccount extends string = string,
   TAccountUserTokenAccount extends string = string,
+  TAccountMarkets extends string = string,
+  TAccountOracle extends string = string,
   TAccountTokenProgram extends string = string,
 > = {
   /** User withdrawing collateral */
   user: TransactionSigner<TAccountUser>;
   /** User collateral account */
   userAccount: Address<TAccountUserAccount>;
+  /** Protocol config — validates accepted USDC mint */
+  config: Address<TAccountConfig>;
   /** Per-user collateral token account PDA — signs outbound transfers */
   userCollateralTokenAccount: Address<TAccountUserCollateralTokenAccount>;
   /** User's USDC token account to receive the withdrawn collateral */
   userTokenAccount: Address<TAccountUserTokenAccount>;
+  /** Markets account — needed for maintenance margin ratios */
+  markets: Address<TAccountMarkets>;
+  /** Oracle account — needed for current prices */
+  oracle: Address<TAccountOracle>;
   tokenProgram?: Address<TAccountTokenProgram>;
   amount: WithdrawCollateralInstructionDataArgs["amount"];
 };
@@ -270,16 +318,22 @@ export type WithdrawCollateralInput<
 export function getWithdrawCollateralInstruction<
   TAccountUser extends string,
   TAccountUserAccount extends string,
+  TAccountConfig extends string,
   TAccountUserCollateralTokenAccount extends string,
   TAccountUserTokenAccount extends string,
+  TAccountMarkets extends string,
+  TAccountOracle extends string,
   TAccountTokenProgram extends string,
   TProgramAddress extends Address = typeof PERPS_PROGRAM_ADDRESS,
 >(
   input: WithdrawCollateralInput<
     TAccountUser,
     TAccountUserAccount,
+    TAccountConfig,
     TAccountUserCollateralTokenAccount,
     TAccountUserTokenAccount,
+    TAccountMarkets,
+    TAccountOracle,
     TAccountTokenProgram
   >,
   config?: { programAddress?: TProgramAddress },
@@ -287,8 +341,11 @@ export function getWithdrawCollateralInstruction<
   TProgramAddress,
   TAccountUser,
   TAccountUserAccount,
+  TAccountConfig,
   TAccountUserCollateralTokenAccount,
   TAccountUserTokenAccount,
+  TAccountMarkets,
+  TAccountOracle,
   TAccountTokenProgram
 > {
   // Program address.
@@ -298,6 +355,7 @@ export function getWithdrawCollateralInstruction<
   const originalAccounts = {
     user: { value: input.user ?? null, isWritable: true },
     userAccount: { value: input.userAccount ?? null, isWritable: true },
+    config: { value: input.config ?? null, isWritable: false },
     userCollateralTokenAccount: {
       value: input.userCollateralTokenAccount ?? null,
       isWritable: true,
@@ -306,6 +364,8 @@ export function getWithdrawCollateralInstruction<
       value: input.userTokenAccount ?? null,
       isWritable: true,
     },
+    markets: { value: input.markets ?? null, isWritable: false },
+    oracle: { value: input.oracle ?? null, isWritable: false },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
@@ -327,8 +387,11 @@ export function getWithdrawCollateralInstruction<
     accounts: [
       getAccountMeta(accounts.user),
       getAccountMeta(accounts.userAccount),
+      getAccountMeta(accounts.config),
       getAccountMeta(accounts.userCollateralTokenAccount),
       getAccountMeta(accounts.userTokenAccount),
+      getAccountMeta(accounts.markets),
+      getAccountMeta(accounts.oracle),
       getAccountMeta(accounts.tokenProgram),
     ],
     data: getWithdrawCollateralInstructionDataEncoder().encode(
@@ -339,8 +402,11 @@ export function getWithdrawCollateralInstruction<
     TProgramAddress,
     TAccountUser,
     TAccountUserAccount,
+    TAccountConfig,
     TAccountUserCollateralTokenAccount,
     TAccountUserTokenAccount,
+    TAccountMarkets,
+    TAccountOracle,
     TAccountTokenProgram
   >);
 }
@@ -355,11 +421,17 @@ export type ParsedWithdrawCollateralInstruction<
     user: TAccountMetas[0];
     /** User collateral account */
     userAccount: TAccountMetas[1];
+    /** Protocol config — validates accepted USDC mint */
+    config: TAccountMetas[2];
     /** Per-user collateral token account PDA — signs outbound transfers */
-    userCollateralTokenAccount: TAccountMetas[2];
+    userCollateralTokenAccount: TAccountMetas[3];
     /** User's USDC token account to receive the withdrawn collateral */
-    userTokenAccount: TAccountMetas[3];
-    tokenProgram: TAccountMetas[4];
+    userTokenAccount: TAccountMetas[4];
+    /** Markets account — needed for maintenance margin ratios */
+    markets: TAccountMetas[5];
+    /** Oracle account — needed for current prices */
+    oracle: TAccountMetas[6];
+    tokenProgram: TAccountMetas[7];
   };
   data: WithdrawCollateralInstructionData;
 };
@@ -372,7 +444,7 @@ export function parseWithdrawCollateralInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedWithdrawCollateralInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 5) {
+  if (instruction.accounts.length < 8) {
     // TODO: Coded error.
     throw new Error("Not enough accounts");
   }
@@ -387,8 +459,11 @@ export function parseWithdrawCollateralInstruction<
     accounts: {
       user: getNextAccount(),
       userAccount: getNextAccount(),
+      config: getNextAccount(),
       userCollateralTokenAccount: getNextAccount(),
       userTokenAccount: getNextAccount(),
+      markets: getNextAccount(),
+      oracle: getNextAccount(),
       tokenProgram: getNextAccount(),
     },
     data: getWithdrawCollateralInstructionDataDecoder().decode(

@@ -55,6 +55,7 @@ export type DepositCollateralInstruction<
   TProgram extends string = typeof PERPS_PROGRAM_ADDRESS,
   TAccountUser extends string | AccountMeta<string> = string,
   TAccountUserAccount extends string | AccountMeta<string> = string,
+  TAccountConfig extends string | AccountMeta<string> = string,
   TAccountUserTokenAccount extends string | AccountMeta<string> = string,
   TAccountUserCollateralTokenAccount extends string | AccountMeta<string> =
     string,
@@ -74,6 +75,9 @@ export type DepositCollateralInstruction<
       TAccountUserAccount extends string
         ? WritableAccount<TAccountUserAccount>
         : TAccountUserAccount,
+      TAccountConfig extends string
+        ? ReadonlyAccount<TAccountConfig>
+        : TAccountConfig,
       TAccountUserTokenAccount extends string
         ? WritableAccount<TAccountUserTokenAccount>
         : TAccountUserTokenAccount,
@@ -130,6 +134,7 @@ export function getDepositCollateralInstructionDataCodec(): FixedSizeCodec<
 export type DepositCollateralAsyncInput<
   TAccountUser extends string = string,
   TAccountUserAccount extends string = string,
+  TAccountConfig extends string = string,
   TAccountUserTokenAccount extends string = string,
   TAccountUserCollateralTokenAccount extends string = string,
   TAccountUsdcMint extends string = string,
@@ -139,6 +144,8 @@ export type DepositCollateralAsyncInput<
   /** User depositing collateral */
   user: TransactionSigner<TAccountUser>;
   userAccount?: Address<TAccountUserAccount>;
+  /** Protocol config — validates accepted USDC mint */
+  config?: Address<TAccountConfig>;
   userTokenAccount: Address<TAccountUserTokenAccount>;
   /** Per-user collateral token account PDA — holds the user's deposited USDC */
   userCollateralTokenAccount?: Address<TAccountUserCollateralTokenAccount>;
@@ -151,6 +158,7 @@ export type DepositCollateralAsyncInput<
 export async function getDepositCollateralInstructionAsync<
   TAccountUser extends string,
   TAccountUserAccount extends string,
+  TAccountConfig extends string,
   TAccountUserTokenAccount extends string,
   TAccountUserCollateralTokenAccount extends string,
   TAccountUsdcMint extends string,
@@ -161,6 +169,7 @@ export async function getDepositCollateralInstructionAsync<
   input: DepositCollateralAsyncInput<
     TAccountUser,
     TAccountUserAccount,
+    TAccountConfig,
     TAccountUserTokenAccount,
     TAccountUserCollateralTokenAccount,
     TAccountUsdcMint,
@@ -173,6 +182,7 @@ export async function getDepositCollateralInstructionAsync<
     TProgramAddress,
     TAccountUser,
     TAccountUserAccount,
+    TAccountConfig,
     TAccountUserTokenAccount,
     TAccountUserCollateralTokenAccount,
     TAccountUsdcMint,
@@ -187,6 +197,7 @@ export async function getDepositCollateralInstructionAsync<
   const originalAccounts = {
     user: { value: input.user ?? null, isWritable: true },
     userAccount: { value: input.userAccount ?? null, isWritable: true },
+    config: { value: input.config ?? null, isWritable: false },
     userTokenAccount: {
       value: input.userTokenAccount ?? null,
       isWritable: true,
@@ -214,6 +225,14 @@ export async function getDepositCollateralInstructionAsync<
       seeds: [
         getBytesEncoder().encode(new Uint8Array([117, 115, 101, 114])),
         getAddressEncoder().encode(expectAddress(accounts.user.value)),
+      ],
+    });
+  }
+  if (!accounts.config.value) {
+    accounts.config.value = await getProgramDerivedAddress({
+      programAddress,
+      seeds: [
+        getBytesEncoder().encode(new Uint8Array([99, 111, 110, 102, 105, 103])),
       ],
     });
   }
@@ -245,6 +264,7 @@ export async function getDepositCollateralInstructionAsync<
     accounts: [
       getAccountMeta(accounts.user),
       getAccountMeta(accounts.userAccount),
+      getAccountMeta(accounts.config),
       getAccountMeta(accounts.userTokenAccount),
       getAccountMeta(accounts.userCollateralTokenAccount),
       getAccountMeta(accounts.usdcMint),
@@ -259,6 +279,7 @@ export async function getDepositCollateralInstructionAsync<
     TProgramAddress,
     TAccountUser,
     TAccountUserAccount,
+    TAccountConfig,
     TAccountUserTokenAccount,
     TAccountUserCollateralTokenAccount,
     TAccountUsdcMint,
@@ -270,6 +291,7 @@ export async function getDepositCollateralInstructionAsync<
 export type DepositCollateralInput<
   TAccountUser extends string = string,
   TAccountUserAccount extends string = string,
+  TAccountConfig extends string = string,
   TAccountUserTokenAccount extends string = string,
   TAccountUserCollateralTokenAccount extends string = string,
   TAccountUsdcMint extends string = string,
@@ -279,6 +301,8 @@ export type DepositCollateralInput<
   /** User depositing collateral */
   user: TransactionSigner<TAccountUser>;
   userAccount: Address<TAccountUserAccount>;
+  /** Protocol config — validates accepted USDC mint */
+  config: Address<TAccountConfig>;
   userTokenAccount: Address<TAccountUserTokenAccount>;
   /** Per-user collateral token account PDA — holds the user's deposited USDC */
   userCollateralTokenAccount: Address<TAccountUserCollateralTokenAccount>;
@@ -291,6 +315,7 @@ export type DepositCollateralInput<
 export function getDepositCollateralInstruction<
   TAccountUser extends string,
   TAccountUserAccount extends string,
+  TAccountConfig extends string,
   TAccountUserTokenAccount extends string,
   TAccountUserCollateralTokenAccount extends string,
   TAccountUsdcMint extends string,
@@ -301,6 +326,7 @@ export function getDepositCollateralInstruction<
   input: DepositCollateralInput<
     TAccountUser,
     TAccountUserAccount,
+    TAccountConfig,
     TAccountUserTokenAccount,
     TAccountUserCollateralTokenAccount,
     TAccountUsdcMint,
@@ -312,6 +338,7 @@ export function getDepositCollateralInstruction<
   TProgramAddress,
   TAccountUser,
   TAccountUserAccount,
+  TAccountConfig,
   TAccountUserTokenAccount,
   TAccountUserCollateralTokenAccount,
   TAccountUsdcMint,
@@ -325,6 +352,7 @@ export function getDepositCollateralInstruction<
   const originalAccounts = {
     user: { value: input.user ?? null, isWritable: true },
     userAccount: { value: input.userAccount ?? null, isWritable: true },
+    config: { value: input.config ?? null, isWritable: false },
     userTokenAccount: {
       value: input.userTokenAccount ?? null,
       isWritable: true,
@@ -360,6 +388,7 @@ export function getDepositCollateralInstruction<
     accounts: [
       getAccountMeta(accounts.user),
       getAccountMeta(accounts.userAccount),
+      getAccountMeta(accounts.config),
       getAccountMeta(accounts.userTokenAccount),
       getAccountMeta(accounts.userCollateralTokenAccount),
       getAccountMeta(accounts.usdcMint),
@@ -374,6 +403,7 @@ export function getDepositCollateralInstruction<
     TProgramAddress,
     TAccountUser,
     TAccountUserAccount,
+    TAccountConfig,
     TAccountUserTokenAccount,
     TAccountUserCollateralTokenAccount,
     TAccountUsdcMint,
@@ -391,12 +421,14 @@ export type ParsedDepositCollateralInstruction<
     /** User depositing collateral */
     user: TAccountMetas[0];
     userAccount: TAccountMetas[1];
-    userTokenAccount: TAccountMetas[2];
+    /** Protocol config — validates accepted USDC mint */
+    config: TAccountMetas[2];
+    userTokenAccount: TAccountMetas[3];
     /** Per-user collateral token account PDA — holds the user's deposited USDC */
-    userCollateralTokenAccount: TAccountMetas[3];
-    usdcMint: TAccountMetas[4];
-    tokenProgram: TAccountMetas[5];
-    systemProgram: TAccountMetas[6];
+    userCollateralTokenAccount: TAccountMetas[4];
+    usdcMint: TAccountMetas[5];
+    tokenProgram: TAccountMetas[6];
+    systemProgram: TAccountMetas[7];
   };
   data: DepositCollateralInstructionData;
 };
@@ -409,7 +441,7 @@ export function parseDepositCollateralInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedDepositCollateralInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 7) {
+  if (instruction.accounts.length < 8) {
     // TODO: Coded error.
     throw new Error("Not enough accounts");
   }
@@ -424,6 +456,7 @@ export function parseDepositCollateralInstruction<
     accounts: {
       user: getNextAccount(),
       userAccount: getNextAccount(),
+      config: getNextAccount(),
       userTokenAccount: getNextAccount(),
       userCollateralTokenAccount: getNextAccount(),
       usdcMint: getNextAccount(),

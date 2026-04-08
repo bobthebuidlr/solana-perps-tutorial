@@ -52,11 +52,17 @@ export const PERPS_ERROR__ORACLE_PRICE_NOT_FOUND = 0x1780; // 6016
 export const PERPS_ERROR__MARKET_NOT_FOUND = 0x1781; // 6017
 /** InsufficientVaultFunds: Vault has insufficient funds to pay settlement */
 export const PERPS_ERROR__INSUFFICIENT_VAULT_FUNDS = 0x1782; // 6018
+/** ExceedsMaxLeverage: Leverage exceeds maximum allowed for this market */
+export const PERPS_ERROR__EXCEEDS_MAX_LEVERAGE = 0x1783; // 6019
+/** BelowMaintenanceMargin: Withdrawal would put account below maintenance margin */
+export const PERPS_ERROR__BELOW_MAINTENANCE_MARGIN = 0x1784; // 6020
 
 export type PerpsError =
   | typeof PERPS_ERROR__ARITHMETIC_OVERFLOW
+  | typeof PERPS_ERROR__BELOW_MAINTENANCE_MARGIN
   | typeof PERPS_ERROR__COLLATERAL_LOCKED
   | typeof PERPS_ERROR__CUSTOM_ERROR
+  | typeof PERPS_ERROR__EXCEEDS_MAX_LEVERAGE
   | typeof PERPS_ERROR__FUNDING_NOT_DUE
   | typeof PERPS_ERROR__INSUFFICIENT_COLLATERAL
   | typeof PERPS_ERROR__INSUFFICIENT_VAULT_FUNDS
@@ -78,8 +84,10 @@ let perpsErrorMessages: Record<PerpsError, string> | undefined;
 if (process.env.NODE_ENV !== "production") {
   perpsErrorMessages = {
     [PERPS_ERROR__ARITHMETIC_OVERFLOW]: `Arithmetic overflow`,
+    [PERPS_ERROR__BELOW_MAINTENANCE_MARGIN]: `Withdrawal would put account below maintenance margin`,
     [PERPS_ERROR__COLLATERAL_LOCKED]: `Cannot withdraw locked collateral`,
     [PERPS_ERROR__CUSTOM_ERROR]: `Custom error message`,
+    [PERPS_ERROR__EXCEEDS_MAX_LEVERAGE]: `Leverage exceeds maximum allowed for this market`,
     [PERPS_ERROR__FUNDING_NOT_DUE]: `Funding rate update not due yet`,
     [PERPS_ERROR__INSUFFICIENT_COLLATERAL]: `Insufficient collateral to perform this operation`,
     [PERPS_ERROR__INSUFFICIENT_VAULT_FUNDS]: `Vault has insufficient funds to pay settlement`,

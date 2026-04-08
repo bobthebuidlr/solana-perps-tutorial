@@ -6,8 +6,11 @@ import { type PerpsMarket } from "../generated/perps";
 import { PositionDirection } from "../generated/perps/types/positionDirection";
 import { useCollateral } from "../hooks/useCollateral";
 import { useMarkets } from "../hooks/useMarkets";
+import { useClosePosition } from "../hooks/useClosePosition";
 import { useOpenPosition } from "../hooks/useOpenPosition";
 import { useOraclePrices } from "../hooks/useOraclePrices";
+import { usePositions } from "../hooks/usePositions";
+import { useUpdatePosition } from "../hooks/useUpdatePosition";
 import { TOKEN_DECIMALS, USDC_DECIMALS } from "../lib/constants";
 import { formatFundingRate, formatOi, getSymbol, iconColorClass } from "../lib/format";
 
@@ -335,7 +338,10 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
     openPosition,
     isLoading: isOpening,
   } = useOpenPosition();
+  const { updatePosition, isLoading: isUpdating } = useUpdatePosition();
+  const { closePosition, isLoading: isClosing } = useClosePosition();
   const { prices: oraclePrices, isLoading: pricesLoading } = useOraclePrices();
+  const { positions } = usePositions();
 
   const [direction, setDirection] = useState<PositionDirection>(
     PositionDirection.Long
@@ -345,6 +351,12 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
   const walletAddress = wallet?.account.address;
   const collateralBalance = balance ?? 0n;
   const hasCollateral = collateralBalance > 0n;
+
+  // Check if a position already exists for the selected market
+  const existingPosition = positions.find(
+    (p) => p.perpsMarket.toString() === market?.tokenMint.toString()
+  );
+  const isSubmitting = isOpening || isUpdating || isClosing;
 
   // Look up oracle price for the selected market
   const oraclePrice =
@@ -369,15 +381,43 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
   }, [marketTokenMint]);
 
   /**
-   * Submits the open-position transaction with token quantity as size.
+   * Submits an order that nets against any existing position.
+   * Same direction → increases size. Opposite → reduces, closes, or flips.
    */
-  const handleOpenPosition = async () => {
+  const handleSubmitOrder = async () => {
     if (!market || !walletAddress || !sizeInput || parseFloat(sizeInput) <= 0)
       return;
-    // Convert token quantity to 6-decimal base units (e.g. 1.5 SOL → 1_500_000)
-    const qtyBase = Math.floor(parseFloat(sizeInput) * 10 ** TOKEN_DECIMALS);
-    // Pass the market's fixed leverage (already 6-decimal on-chain)
-    const sig = await openPosition(market.tokenMint, direction, qtyBase, Number(market.maxLeverage));
+
+    const orderQty = Math.floor(parseFloat(sizeInput) * 10 ** TOKEN_DECIMALS);
+    const leverageRaw = Number(market.maxLeverage);
+    let sig: string | null = null;
+
+    if (!existingPosition) {
+      sig = await openPosition(market.tokenMint, direction, orderQty, leverageRaw);
+    } else {
+      const currentSize = Number(existingPosition.positionSize);
+      const sameDirection =
+        (direction === PositionDirection.Long && existingPosition.direction === PositionDirection.Long) ||
+        (direction === PositionDirection.Short && existingPosition.direction === PositionDirection.Short);
+
+      if (sameDirection) {
+        // Increase: 5 long + 3 long = 8 long
+        const resultSize = currentSize + orderQty;
+        sig = await updatePosition(market.tokenMint, direction, resultSize, leverageRaw);
+      } else if (orderQty < currentSize) {
+        // Reduce: 5 long + 1 short = 4 long
+        const resultSize = currentSize - orderQty;
+        sig = await updatePosition(market.tokenMint, existingPosition.direction, resultSize, leverageRaw);
+      } else if (orderQty === currentSize) {
+        // Close: 5 long + 5 short = flat
+        sig = await closePosition(market.tokenMint);
+      } else {
+        // Flip: 5 long + 7 short = 2 short
+        const resultSize = orderQty - currentSize;
+        sig = await updatePosition(market.tokenMint, direction, resultSize, leverageRaw);
+      }
+    }
+
     if (sig) {
       setSizeInput("");
     }
@@ -523,7 +563,7 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
               placeholder="0.000000"
               step="0.000001"
               min="0"
-              disabled={isOpening || !oraclePrice}
+              disabled={isSubmitting || !oraclePrice}
               className="w-full rounded-xl border border-border-low bg-card px-4 py-3 pr-16 text-lg font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-foreground/20 disabled:opacity-50"
             />
             <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">
@@ -567,17 +607,17 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
 
         {/* Submit */}
         <button
-          onClick={handleOpenPosition}
-          disabled={isOpening || !sizeValid}
+          onClick={handleSubmitOrder}
+          disabled={isSubmitting || !sizeValid}
           className={`w-full rounded-xl px-4 py-3 text-sm font-semibold transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${
             direction === PositionDirection.Long
               ? "bg-green-500 text-white"
               : "bg-red-500 text-white"
           }`}
         >
-          {isOpening
-            ? "Opening position…"
-            : `Open ${direction === PositionDirection.Long ? "Long" : "Short"}`}
+          {isSubmitting
+            ? "Submitting…"
+            : `${existingPosition ? "Modify" : "Open"} ${direction === PositionDirection.Long ? "Long" : "Short"}`}
         </button>
 
       </div>

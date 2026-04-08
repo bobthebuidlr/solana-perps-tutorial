@@ -65,6 +65,16 @@ pub mod perps {
         close_position::handler(ctx, token_mint)
     }
 
+    pub fn update_position<'info>(
+        ctx: Context<'_, '_, 'info, 'info, UpdatePosition<'info>>,
+        token_mint: Pubkey,
+        direction: PositionDirection,
+        size: u64,
+        leverage: u64,
+    ) -> Result<()> {
+        update_position::handler(ctx, token_mint, direction, size, leverage)
+    }
+
     pub fn withdraw_collateral<'info>(ctx: Context<'_, '_, 'info, 'info, WithdrawCollateral<'info>>, amount: u64) -> Result<()> {
         withdraw_collateral::handler(ctx, amount)
     }

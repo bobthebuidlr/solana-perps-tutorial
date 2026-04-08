@@ -9,4 +9,5 @@
 export * from "./markets";
 export * from "./oracle";
 export * from "./position";
+export * from "./protocolConfig";
 export * from "./userAccount";
