@@ -10,7 +10,7 @@ import { useMarkets } from "../hooks/useMarkets";
 import { useOraclePrices } from "../hooks/useOraclePrices";
 import { usePositions } from "../hooks/usePositions";
 import { USDC_DECIMALS, TOKEN_DECIMALS } from "../lib/constants";
-import { formatUsdc, getSymbol, iconColorClass } from "../lib/format";
+import { getSymbol, iconColorClass } from "../lib/format";
 
 /**
  * Formats a raw u64 token quantity (6-decimal precision) into a display string.
@@ -58,18 +58,6 @@ function pnlColorClass(amount: bigint): string {
   return amount >= 0n ? "text-green-600" : "text-red-500";
 }
 
-/**
- * Returns a human-readable relative age string for a Unix timestamp.
- * @param openedAt - Unix timestamp in seconds (i64).
- * @returns e.g. "5m ago", "2h ago", "3d ago"
- */
-function formatAge(openedAt: bigint): string {
-  const secs = Math.floor(Date.now() / 1000) - Number(openedAt);
-  if (secs < 60) return `${secs}s ago`;
-  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
-  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
-  return `${Math.floor(secs / 86400)}d ago`;
-}
 
 /**
  * Table of all open perpetual futures positions for the connected wallet.
@@ -163,12 +151,11 @@ export function PositionsTable() {
                 {[
                   { label: "Market", align: "left" },
                   { label: "Size", align: "right" },
+                  { label: "Value", align: "right" },
                   { label: "Entry Price", align: "right" },
                   { label: "Oracle Price", align: "right" },
                   { label: "Price PnL", align: "right" },
                   { label: "Funding", align: "right" },
-                  { label: "Collateral", align: "right" },
-                  { label: "Opened", align: "right" },
                   { label: "", align: "right" },
                 ].map((col) => (
                   <th
@@ -276,6 +263,13 @@ function PositionRow({
         <p className="text-xs text-muted">{symbol}</p>
       </td>
 
+      {/* Position value — size * oracle price */}
+      <td className="py-3.5 px-4 text-right font-mono tabular-nums">
+        {currentPrice !== null
+          ? formatPrice(position.positionSize * currentPrice / BigInt(10 ** TOKEN_DECIMALS))
+          : <span className="text-muted">—</span>}
+      </td>
+
       {/* Entry price */}
       <td className="py-3.5 px-4 text-right font-mono tabular-nums">
         {formatPrice(position.entryPrice)}
@@ -320,19 +314,6 @@ function PositionRow({
         ) : (
           <span className="text-muted">—</span>
         )}
-      </td>
-
-      {/* Collateral */}
-      <td className="py-3.5 px-4 text-right">
-        <p className="font-mono tabular-nums">
-          {formatUsdc(position.collateral)}
-        </p>
-        <p className="text-xs text-muted">USDC</p>
-      </td>
-
-      {/* Opened */}
-      <td className="py-3.5 px-4 text-right text-xs text-muted tabular-nums">
-        {formatAge(position.openedAt)}
       </td>
 
       {/* Close position */}

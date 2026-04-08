@@ -9,7 +9,7 @@ import { useMarkets } from "../hooks/useMarkets";
 import { useOpenPosition } from "../hooks/useOpenPosition";
 import { useOraclePrices } from "../hooks/useOraclePrices";
 import { TOKEN_DECIMALS, USDC_DECIMALS } from "../lib/constants";
-import { fmt, formatUsdc, getSymbol, iconColorClass } from "../lib/format";
+import { formatFundingRate, formatOi, getSymbol, iconColorClass } from "../lib/format";
 
 /**
  * Markets component manages the selected market state and passes it to children.
@@ -162,37 +162,69 @@ export function MarketsList({
           </span>
         </div>
 
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border-low">
-              {["Market", "OI", "Funding"].map((col) => (
-                <th
-                  key={col}
-                  className={`pb-3 text-xs font-medium uppercase tracking-wide text-muted ${
-                    col === "Market" ? "text-left" : "text-right"
-                  }`}
-                >
-                  {col}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border-low">
-            {markets.map((market) => (
-              <MarketRow
-                key={market.tokenMint.toString()}
-                market={market}
-                isSelected={
-                  selectedMarket?.tokenMint.toString() ===
-                  market.tokenMint.toString()
-                }
-                onClick={() => onSelectMarket(market)}
-              />
-            ))}
-          </tbody>
-        </table>
+        <MarketsTable
+          markets={markets}
+          selectedMarket={selectedMarket}
+          onSelectMarket={onSelectMarket}
+        />
       </div>
     </div>
+  );
+}
+
+/**
+ * Inner table for the markets list, fetches oracle prices for display.
+ * @param markets - Array of market data.
+ * @param selectedMarket - Currently selected market.
+ * @param onSelectMarket - Callback to select a market.
+ */
+function MarketsTable({
+  markets,
+  selectedMarket,
+  onSelectMarket,
+}: {
+  markets: PerpsMarket[];
+  selectedMarket: PerpsMarket | null;
+  onSelectMarket: (market: PerpsMarket) => void;
+}) {
+  const { prices: oraclePrices } = useOraclePrices();
+
+  return (
+    <table className="w-full text-sm">
+      <thead>
+        <tr className="border-b border-border-low">
+          {["Market", "Oracle Price", "OI", "Funding"].map((col) => (
+            <th
+              key={col}
+              className={`pb-3 text-xs font-medium uppercase tracking-wide text-muted ${
+                col === "Market" ? "text-left" : "text-right"
+              }`}
+            >
+              {col}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-border-low">
+        {markets.map((market) => {
+          const price = oraclePrices?.find(
+            (p) => p.tokenMint.toString() === market.tokenMint.toString()
+          )?.price ?? null;
+          return (
+            <MarketRow
+              key={market.tokenMint.toString()}
+              market={market}
+              oraclePrice={price}
+              isSelected={
+                selectedMarket?.tokenMint.toString() ===
+                market.tokenMint.toString()
+              }
+              onClick={() => onSelectMarket(market)}
+            />
+          );
+        })}
+      </tbody>
+    </table>
   );
 }
 
@@ -201,15 +233,18 @@ export function MarketsList({
 /**
  * Clickable row in the market list.
  * @param market - Market data to display.
+ * @param oraclePrice - Current oracle price for this market, or null.
  * @param isSelected - Whether this row is currently selected.
  * @param onClick - Called when the row is clicked.
  */
 function MarketRow({
   market,
+  oraclePrice,
   isSelected,
   onClick,
 }: {
   market: PerpsMarket;
+  oraclePrice: bigint | null;
   isSelected: boolean;
   onClick: () => void;
 }) {
@@ -221,6 +256,7 @@ function MarketRow({
     totalOi > 0n ? Number((market.totalLongOi * 100n) / totalOi) : 50;
   // When long OI exceeds short OI, longs pay shorts (positive funding)
   const fundingPositive = market.totalLongOi >= market.totalShortOi;
+  const fundingRate = formatFundingRate(market.totalLongOi, market.totalShortOi);
 
   return (
     <tr
@@ -243,20 +279,21 @@ function MarketRow({
           >
             {symbol.slice(0, 3)}
           </span>
-          <div className="min-w-0">
-            <p className="font-semibold leading-tight">{market.name}</p>
-            <p className="mt-0.5 truncate font-mono text-xs text-muted">
-              {market.tokenMint.toString().slice(0, 4)}…
-              {market.tokenMint.toString().slice(-4)}
-            </p>
-          </div>
+          <p className="font-semibold leading-tight">{market.name}</p>
         </div>
+      </td>
+
+      {/* Oracle price */}
+      <td className="py-3 pr-4 text-right font-mono text-xs font-medium tabular-nums">
+        {oraclePrice !== null
+          ? `$${(Number(oraclePrice) / 10 ** USDC_DECIMALS).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+          : "—"}
       </td>
 
       {/* Open interest with long/short skew bar */}
       <td className="py-3 pr-4 text-right">
         <p className="font-mono text-xs font-medium tabular-nums">
-          {fmt(totalOi)}
+          {formatOi(totalOi)}
         </p>
         <div className="mt-1 flex items-center justify-end gap-1">
           <div className="h-1 w-12 overflow-hidden rounded-full bg-red-500/25">
@@ -268,17 +305,16 @@ function MarketRow({
         </div>
       </td>
 
-      {/* Funding direction */}
+      {/* Funding rate */}
       <td className="py-3 text-right">
         <span
-          className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold ${
+          className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 font-mono text-xs font-semibold ${
             fundingPositive
               ? "bg-green-500/10 text-green-600"
               : "bg-red-500/10 text-red-500"
           }`}
         >
-          {fundingPositive ? "▲" : "▼"}
-          {fundingPositive ? "L" : "S"}
+          {fundingRate}
         </span>
       </td>
     </tr>
@@ -298,7 +334,6 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
   const {
     openPosition,
     isLoading: isOpening,
-    error: openError,
   } = useOpenPosition();
   const { prices: oraclePrices, isLoading: pricesLoading } = useOraclePrices();
 
@@ -306,7 +341,6 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
     PositionDirection.Long
   );
   const [sizeInput, setSizeInput] = useState("");
-  const [depositOpen, setDepositOpen] = useState(false);
 
   const walletAddress = wallet?.account.address;
   const collateralBalance = balance ?? 0n;
@@ -424,43 +458,13 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
       <div className="space-y-4 p-6">
-        {/* Market header + available collateral */}
-        <div className="flex items-center justify-between">
-          {market && (
-            <MarketHeader
-              symbol={symbol}
-              colorClass={colorClass}
-              name={market.name}
-            />
-          )}
-          <div className="text-right">
-            <p className="text-xs text-muted">Balance</p>
-            <p className="text-sm font-semibold tabular-nums">
-              {formatUsdc(collateralBalance)}{" "}
-              <span className="text-xs font-normal text-muted">USDC</span>
-            </p>
-          </div>
-        </div>
-
-        {/* Oracle price display */}
+        {/* Market header */}
         {market && (
-          <div className="rounded-lg bg-cream/30 px-3 py-2 text-xs text-muted">
-            <span>Oracle price: </span>
-            <span className="font-mono font-semibold text-foreground">
-              {oraclePrice !== null
-                ? `$${(Number(oraclePrice) / 10 ** USDC_DECIMALS).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                : "—"}
-            </span>
-            {oraclePrice !== null && maxQtyDisplay > 0 && (
-              <span className="ml-2">
-                · Max:{" "}
-                {maxQtyDisplay.toLocaleString("en-US", {
-                  maximumFractionDigits: 6,
-                })}{" "}
-                {symbol}
-              </span>
-            )}
-          </div>
+          <MarketHeader
+            symbol={symbol}
+            colorClass={colorClass}
+            name={market.name}
+          />
         )}
 
         {/* Long / Short direction toggle */}
@@ -559,27 +563,6 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
           <SummaryRow label="Leverage">
             <span className="font-mono tabular-nums">{leverage}x</span>
           </SummaryRow>
-          <SummaryRow label="Notional">
-            <span className="font-mono tabular-nums">
-              {parsedQty > 0 && oraclePrice !== null
-                ? `${formatUsdc(notionalValue)} USDC`
-                : "—"}
-            </span>
-          </SummaryRow>
-          <SummaryRow label="Margin">
-            <span className="font-mono tabular-nums">
-              {parsedQty > 0 && oraclePrice !== null
-                ? `${formatUsdc(collateralCost)} USDC`
-                : "—"}
-            </span>
-          </SummaryRow>
-          <SummaryRow label="Balance after">
-            <span className="font-mono tabular-nums">
-              {parsedQty > 0 && oraclePrice !== null
-                ? `${formatUsdc(collateralBalance > collateralCost ? collateralBalance - collateralCost : 0n)} USDC`
-                : `${formatUsdc(collateralBalance)} USDC`}
-            </span>
-          </SummaryRow>
         </div>
 
         {/* Submit */}
@@ -597,19 +580,6 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
             : `Open ${direction === PositionDirection.Long ? "Long" : "Short"}`}
         </button>
 
-        {/* Deposit more link */}
-        <button
-          onClick={() => setDepositOpen(true)}
-          className="w-full rounded-xl border border-border-low bg-card px-4 py-2.5 text-xs font-medium text-muted transition hover:-translate-y-0.5 hover:text-foreground hover:shadow-sm"
-        >
-          + Deposit more collateral
-        </button>
-
-        {openError && (
-          <div className="rounded-lg border border-red-500/20 bg-red-50/50 p-3 text-sm text-red-600">
-            {openError.message}
-          </div>
-        )}
       </div>
     </div>
   );

@@ -51,3 +51,35 @@ export function fmt(val: bigint): string {
   if (n >= 1_000) return `${(n / 1_000).toFixed(2)}K`;
   return n.toLocaleString();
 }
+
+/**
+ * Formats a raw OI bigint (6-decimal precision) as a dollar string with compact suffix.
+ * @param val - Raw OI value in base units (10^6 = $1.00).
+ * @returns Formatted string, e.g. "$1.23M" or "$456.00K".
+ */
+export function formatOi(val: bigint): string {
+  const n = Number(val) / 10 ** USDC_DECIMALS;
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `$${(n / 1_000).toFixed(2)}K`;
+  return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/**
+ * Calculates the current funding rate from OI imbalance (mirrors on-chain logic).
+ * @param totalLongOi - Total long open interest (raw u64).
+ * @param totalShortOi - Total short open interest (raw u64).
+ * @returns Funding rate as a percentage string, e.g. "+0.05%" or "-0.03%".
+ */
+export function formatFundingRate(totalLongOi: bigint, totalShortOi: bigint): string {
+  const total = totalLongOi + totalShortOi;
+  if (total === 0n) return "0.00%";
+  const imbalance = totalLongOi > totalShortOi
+    ? totalLongOi - totalShortOi
+    : totalShortOi - totalLongOi;
+  const MAX_FUNDING_RATE = 1_000n;
+  const FUNDING_RATE_BASE = 1_000_000n;
+  const rate = (imbalance * MAX_FUNDING_RATE) / total;
+  const pct = Number(rate) / Number(FUNDING_RATE_BASE) * 100;
+  const sign = totalLongOi >= totalShortOi ? "+" : "-";
+  return `${sign}${pct.toFixed(4)}%`;
+}
