@@ -29,6 +29,7 @@ export function useMarkets() {
       return marketsAccount.data.perps;
     },
     enabled: !!marketsAddress && !!client?.runtime?.rpc,
+    refetchInterval: 5000,
   });
 
   return {

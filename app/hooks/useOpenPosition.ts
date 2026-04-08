@@ -34,14 +34,16 @@ export function useOpenPosition() {
    *
    * @param tokenMint - The token mint address of the market.
    * @param direction - Long or Short.
-   * @param amount - Position size in base units (USDC with 6 decimals).
+   * @param amount - Position size in base units (token qty with 6 decimals).
+   * @param leverage - Leverage multiplier in 6-decimal (e.g. 5_000_000 = 5x).
    * @returns Transaction signature string, or null on failure.
    */
   const openPosition = useCallback(
     async (
       tokenMint: Address,
       direction: PositionDirection,
-      amount: number
+      amount: number,
+      leverage: number
     ): Promise<string | null> => {
       if (!walletAddress || !wallet || !userAccountAddress || !marketsAddress || !oracleAddress) {
         console.error("❌ OpenPosition: missing required accounts");
@@ -71,6 +73,7 @@ export function useOpenPosition() {
             tokenMint,
             direction,
             amount: BigInt(Math.floor(amount)),
+            leverage: BigInt(Math.floor(leverage)),
           }),
         };
 

@@ -14,11 +14,21 @@ pub struct InitializeMarketWithOracle<'info> {
     pub oracle: Account<'info, Oracle>,
 }
 
+/// Initializes a new perpetual market with an oracle price entry.
+/// @param ctx - Accounts context.
+/// @param token - Token mint pubkey for the market.
+/// @param name - Human-readable market name.
+/// @param price - Initial oracle price (6-decimal fixed point).
+/// @param max_leverage - Maximum allowed leverage (6-decimal, e.g. 10_000_000 = 10x).
+/// @param maintenance_margin_ratio - Maintenance margin ratio (6-decimal, e.g. 50_000 = 5%).
+/// @returns Ok(()) on success.
 pub fn handler(
     ctx: Context<InitializeMarketWithOracle>,
     token: Pubkey,
     name: String,
     price: u64,
+    max_leverage: u64,
+    maintenance_margin_ratio: u64,
 ) -> Result<()> {
     let clock = Clock::get()?;
     let markets = &mut ctx.accounts.markets;
@@ -32,6 +42,8 @@ pub fn handler(
         cumulative_funding_long: 0,
         cumulative_funding_short: 0,
         last_funding_update: clock.unix_timestamp,
+        max_leverage,
+        maintenance_margin_ratio,
     };
 
     let oracle_price = OraclePrice {

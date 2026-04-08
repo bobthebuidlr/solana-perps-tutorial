@@ -24,6 +24,9 @@ pub const VAULT_SEED: &[u8] = b"vault";
 #[constant]
 pub const USER_COLLATERAL_SEED: &[u8] = b"user_collateral";
 
+#[constant]
+pub const CONFIG_SEED: &[u8] = b"config";
+
 pub const ANCHOR_DISCRIMINATOR: usize = 8;
 
 pub const MAX_MARKETS: usize = 10;
@@ -32,3 +35,7 @@ pub const MAX_MARKETS: usize = 10;
 pub const FUNDING_INTERVAL: i64 = 300; // 5 minutes in seconds
 pub const FUNDING_RATE_BASE: u64 = 1_000_000; // 1_000_000 = 100% for precision
 pub const MAX_FUNDING_RATE: u64 = 1_000; // 0.1% max per interval
+
+// Leverage and margin parameters
+pub const LEVERAGE_PRECISION: u64 = 1_000_000; // 6-decimal (1_000_000 = 1x)
+pub const MARGIN_PRECISION: u64 = 1_000_000; // 6-decimal (1_000_000 = 100%)

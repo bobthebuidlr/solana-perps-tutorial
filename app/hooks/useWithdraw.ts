@@ -6,7 +6,7 @@ import { PERPS_PROGRAM_ADDRESS } from "../generated/perps";
 import { getWithdrawCollateralInstructionDataEncoder } from "../generated/perps/instructions/withdrawCollateral";
 import { TOKEN_PROGRAM_ADDRESS } from "../lib/constants";
 import { deriveUserCollateralPda } from "../lib/pdas";
-import { useUserAccountPda } from "./usePdas";
+import { useConfigPda, useMarketsPda, useOraclePda, useUserAccountPda } from "./usePdas";
 
 /**
  * Hook to withdraw collateral from the user's perps account.
@@ -25,6 +25,9 @@ export function useWithdraw() {
 
   const walletAddress = wallet?.account.address;
   const userAccountAddress = useUserAccountPda(walletAddress);
+  const configAddress = useConfigPda();
+  const marketsAddress = useMarketsPda();
+  const oracleAddress = useOraclePda();
 
   /**
    * Sends a withdraw collateral instruction.
@@ -35,8 +38,8 @@ export function useWithdraw() {
    */
   const withdraw = useCallback(
     async (amount: number, userTokenAccount: Address) => {
-      if (!walletAddress || !wallet || !userAccountAddress) {
-        console.error("❌ Withdraw Error: No wallet connected");
+      if (!walletAddress || !wallet || !userAccountAddress || !configAddress || !marketsAddress || !oracleAddress) {
+        console.error("❌ Withdraw Error: Missing required accounts");
         return null;
       }
 
@@ -54,8 +57,11 @@ export function useWithdraw() {
           accounts: [
             { address: walletAddress, role: 3 },              // user (WritableSigner)
             { address: userAccountAddress, role: 1 },         // userAccount (Writable)
+            { address: configAddress, role: 0 },              // config (Readonly)
             { address: userCollateralAddress, role: 1 },      // userCollateralTokenAccount (Writable)
             { address: userTokenAccount, role: 1 },           // userTokenAccount (Writable)
+            { address: marketsAddress, role: 0 },             // markets (Readonly)
+            { address: oracleAddress, role: 0 },              // oracle (Readonly)
             { address: TOKEN_PROGRAM_ADDRESS, role: 0 },      // tokenProgram (Readonly)
           ],
           data: getWithdrawCollateralInstructionDataEncoder().encode({
@@ -81,7 +87,7 @@ export function useWithdraw() {
         setIsLoading(false);
       }
     },
-    [send, walletAddress, wallet, userAccountAddress, queryClient]
+    [send, walletAddress, wallet, userAccountAddress, configAddress, marketsAddress, oracleAddress, queryClient]
   );
 
   return {

@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
-use crate::{constants::*, error::ErrorCode, state::UserAccount};
+use crate::{constants::*, error::ErrorCode, state::UserAccount, ProtocolConfig};
 
 #[derive(Accounts)]
 pub struct DepositCollateral<'info> {
@@ -18,9 +18,17 @@ pub struct DepositCollateral<'info> {
     )]
     pub user_account: Account<'info, UserAccount>,
 
+    /// Protocol config — validates accepted USDC mint
+    #[account(
+      seeds = [CONFIG_SEED],
+      bump = config.bump
+    )]
+    pub config: Account<'info, ProtocolConfig>,
+
     #[account(
       mut,
-      constraint = user_token_account.owner == user.key()
+      constraint = user_token_account.owner == user.key(),
+      token::mint = config.usdc_mint
     )]
     pub user_token_account: Account<'info, TokenAccount>,
 
@@ -35,6 +43,7 @@ pub struct DepositCollateral<'info> {
     )]
     pub user_collateral_token_account: Account<'info, TokenAccount>,
 
+    #[account(address = config.usdc_mint)]
     pub usdc_mint: Account<'info, Mint>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,

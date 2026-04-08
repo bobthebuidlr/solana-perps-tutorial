@@ -45,6 +45,10 @@ export type PerpsMarket = {
   cumulativeFundingShort: bigint;
   /** Last funding update timestamp */
   lastFundingUpdate: bigint;
+  /** Maximum leverage allowed (6-decimal, e.g. 10_000_000 = 10x) */
+  maxLeverage: bigint;
+  /** Maintenance margin ratio (6-decimal, e.g. 50_000 = 5%) */
+  maintenanceMarginRatio: bigint;
 };
 
 export type PerpsMarketArgs = {
@@ -62,6 +66,10 @@ export type PerpsMarketArgs = {
   cumulativeFundingShort: number | bigint;
   /** Last funding update timestamp */
   lastFundingUpdate: number | bigint;
+  /** Maximum leverage allowed (6-decimal, e.g. 10_000_000 = 10x) */
+  maxLeverage: number | bigint;
+  /** Maintenance margin ratio (6-decimal, e.g. 50_000 = 5%) */
+  maintenanceMarginRatio: number | bigint;
 };
 
 export function getPerpsMarketEncoder(): Encoder<PerpsMarketArgs> {
@@ -73,6 +81,8 @@ export function getPerpsMarketEncoder(): Encoder<PerpsMarketArgs> {
     ["cumulativeFundingLong", getI128Encoder()],
     ["cumulativeFundingShort", getI128Encoder()],
     ["lastFundingUpdate", getI64Encoder()],
+    ["maxLeverage", getU64Encoder()],
+    ["maintenanceMarginRatio", getU64Encoder()],
   ]);
 }
 
@@ -85,6 +95,8 @@ export function getPerpsMarketDecoder(): Decoder<PerpsMarket> {
     ["cumulativeFundingLong", getI128Decoder()],
     ["cumulativeFundingShort", getI128Decoder()],
     ["lastFundingUpdate", getI64Decoder()],
+    ["maxLeverage", getU64Decoder()],
+    ["maintenanceMarginRatio", getU64Decoder()],
   ]);
 }
 

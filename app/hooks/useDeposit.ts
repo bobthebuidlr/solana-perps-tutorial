@@ -6,7 +6,7 @@ import { PERPS_PROGRAM_ADDRESS } from "../generated/perps";
 import { getDepositCollateralInstructionDataEncoder } from "../generated/perps/instructions/depositCollateral";
 import { SYSTEM_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS, USDC_MINT_ADDRESS } from "../lib/constants";
 import { deriveUserCollateralPda } from "../lib/pdas";
-import { useUserAccountPda } from "./usePdas";
+import { useConfigPda, useUserAccountPda } from "./usePdas";
 
 /**
  * Hook to deposit collateral into the user's perps account.
@@ -25,6 +25,7 @@ export function useDeposit() {
 
   const walletAddress = wallet?.account.address;
   const userAccountAddress = useUserAccountPda(walletAddress);
+  const configAddress = useConfigPda();
 
   /**
    * Sends a deposit collateral instruction.
@@ -35,8 +36,8 @@ export function useDeposit() {
    */
   const deposit = useCallback(
     async (amount: number, userTokenAccount: Address) => {
-      if (!walletAddress || !wallet || !userAccountAddress) {
-        console.error("❌ Deposit Error: No wallet connected");
+      if (!walletAddress || !wallet || !userAccountAddress || !configAddress) {
+        console.error("❌ Deposit Error: No wallet connected or missing config");
         return null;
       }
 
@@ -54,6 +55,7 @@ export function useDeposit() {
           accounts: [
             { address: walletAddress, role: 3 },                // user (WritableSigner)
             { address: userAccountAddress, role: 1 },           // userAccount (Writable, PDA with init_if_needed)
+            { address: configAddress, role: 0 },                // config (Readonly)
             { address: userTokenAccount, role: 1 },             // userTokenAccount (Writable)
             { address: userCollateralAddress, role: 1 },        // userCollateralTokenAccount (Writable, PDA with init_if_needed)
             { address: USDC_MINT_ADDRESS, role: 0 },            // usdcMint (Readonly)
@@ -83,7 +85,7 @@ export function useDeposit() {
         setIsLoading(false);
       }
     },
-    [send, walletAddress, wallet, userAccountAddress, queryClient]
+    [send, walletAddress, wallet, userAccountAddress, configAddress, queryClient]
   );
 
   return {

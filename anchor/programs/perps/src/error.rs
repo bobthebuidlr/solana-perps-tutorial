@@ -58,4 +58,10 @@ pub enum ErrorCode {
 
     #[msg("Vault has insufficient funds to pay settlement")]
     InsufficientVaultFunds,
+
+    #[msg("Leverage exceeds maximum allowed for this market")]
+    ExceedsMaxLeverage,
+
+    #[msg("Withdrawal would put account below maintenance margin")]
+    BelowMaintenanceMargin,
 }

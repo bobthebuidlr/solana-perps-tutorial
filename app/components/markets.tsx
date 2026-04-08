@@ -294,11 +294,7 @@ function MarketRow({
  */
 export function OrderForm({ market }: { market: PerpsMarket | null }) {
   const { wallet } = useWalletConnection();
-  const {
-    collateral,
-    lockedCollateral,
-    isLoading: collateralLoading,
-  } = useCollateral();
+  const { balance, isLoading: collateralLoading } = useCollateral();
   const {
     openPosition,
     isLoading: isOpening,
@@ -313,8 +309,8 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
   const [depositOpen, setDepositOpen] = useState(false);
 
   const walletAddress = wallet?.account.address;
-  const availableCollateral = collateral ?? 0n;
-  const hasCollateral = availableCollateral > 0n;
+  const collateralBalance = balance ?? 0n;
+  const hasCollateral = collateralBalance > 0n;
 
   // Look up oracle price for the selected market
   const oraclePrice =
@@ -322,11 +318,13 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
       (p) => p.tokenMint.toString() === market?.tokenMint.toString()
     )?.price ?? null;
 
-  // Max token quantity user can take: available_collateral / oracle_price
-  // Both in 6-decimal fixed point, so multiply by 10^6 to keep precision
+  // Fixed leverage from market config (6-decimal, e.g. 10_000_000 = 10x)
+  const leverage = market ? Number(market.maxLeverage) / 1_000_000 : 1;
+
+  // Max token quantity: (available_collateral * leverage) / oracle_price
   const maxQtyBase =
-    oraclePrice && oraclePrice > 0n && availableCollateral > 0n
-      ? (availableCollateral * BigInt(10 ** TOKEN_DECIMALS)) / oraclePrice
+    oraclePrice && oraclePrice > 0n && collateralBalance > 0n
+      ? (collateralBalance * BigInt(leverage) * BigInt(10 ** TOKEN_DECIMALS)) / oraclePrice
       : 0n;
   const maxQtyDisplay = Number(maxQtyBase) / 10 ** TOKEN_DECIMALS;
 
@@ -344,7 +342,8 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
       return;
     // Convert token quantity to 6-decimal base units (e.g. 1.5 SOL → 1_500_000)
     const qtyBase = Math.floor(parseFloat(sizeInput) * 10 ** TOKEN_DECIMALS);
-    const sig = await openPosition(market.tokenMint, direction, qtyBase);
+    // Pass the market's fixed leverage (already 6-decimal on-chain)
+    const sig = await openPosition(market.tokenMint, direction, qtyBase, Number(market.maxLeverage));
     if (sig) {
       setSizeInput("");
     }
@@ -377,16 +376,19 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
   const parsedQty = parseFloat(sizeInput) || 0;
   const parsedQtyBase = BigInt(Math.floor(parsedQty * 10 ** TOKEN_DECIMALS));
 
-  // Collateral cost in USDC base units: qty * oracle_price / 10^6
-  const collateralCost =
+  // Notional value: qty * oracle_price / 10^6
+  const notionalValue =
     oraclePrice && parsedQtyBase > 0n
       ? (parsedQtyBase * oraclePrice) / BigInt(10 ** TOKEN_DECIMALS)
       : 0n;
 
+  // Collateral cost (margin): notional / leverage
+  const collateralCost = leverage > 0 ? notionalValue / BigInt(leverage) : 0n;
+
   const sizeValid =
     parsedQty > 0 &&
     oraclePrice !== null &&
-    collateralCost <= availableCollateral;
+    collateralCost <= collateralBalance;
 
   // No collateral deposited yet
   if (!hasCollateral) {
@@ -432,9 +434,9 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
             />
           )}
           <div className="text-right">
-            <p className="text-xs text-muted">Available</p>
+            <p className="text-xs text-muted">Balance</p>
             <p className="text-sm font-semibold tabular-nums">
-              {formatUsdc(availableCollateral)}{" "}
+              {formatUsdc(collateralBalance)}{" "}
               <span className="text-xs font-normal text-muted">USDC</span>
             </p>
           </div>
@@ -526,7 +528,7 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
           </div>
           {parsedQty > 0 &&
             oraclePrice !== null &&
-            collateralCost > availableCollateral && (
+            collateralCost > collateralBalance && (
               <p className="text-xs text-red-500">
                 Exceeds available collateral
               </p>
@@ -554,23 +556,28 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
               {parsedQty > 0 ? `${sizeInput} ${symbol}` : "—"}
             </span>
           </SummaryRow>
-          <SummaryRow label="Cost">
+          <SummaryRow label="Leverage">
+            <span className="font-mono tabular-nums">{leverage}x</span>
+          </SummaryRow>
+          <SummaryRow label="Notional">
+            <span className="font-mono tabular-nums">
+              {parsedQty > 0 && oraclePrice !== null
+                ? `${formatUsdc(notionalValue)} USDC`
+                : "—"}
+            </span>
+          </SummaryRow>
+          <SummaryRow label="Margin">
             <span className="font-mono tabular-nums">
               {parsedQty > 0 && oraclePrice !== null
                 ? `${formatUsdc(collateralCost)} USDC`
                 : "—"}
             </span>
           </SummaryRow>
-          <SummaryRow label="Available after">
+          <SummaryRow label="Balance after">
             <span className="font-mono tabular-nums">
               {parsedQty > 0 && oraclePrice !== null
-                ? `${formatUsdc(availableCollateral > collateralCost ? availableCollateral - collateralCost : 0n)} USDC`
-                : `${formatUsdc(availableCollateral)} USDC`}
-            </span>
-          </SummaryRow>
-          <SummaryRow label="Locked">
-            <span className="font-mono tabular-nums">
-              {formatUsdc(lockedCollateral)} USDC
+                ? `${formatUsdc(collateralBalance > collateralCost ? collateralBalance - collateralCost : 0n)} USDC`
+                : `${formatUsdc(collateralBalance)} USDC`}
             </span>
           </SummaryRow>
         </div>

@@ -22,11 +22,15 @@ const MARKETS_CONFIG = [
     token: new PublicKey("So11111111111111111111111111111111111111112"), // Native SOL mint
     name: "SOL-PERP",
     price: new anchor.BN(100_000_000), // $100 in u64 format (6 decimals)
+    maxLeverage: new anchor.BN(10_000_000), // 10x max leverage (6-decimal)
+    maintenanceMarginRatio: new anchor.BN(50_000), // 5% maintenance margin (6-decimal)
   },
   {
     token: new PublicKey("BTCNmZvXfaRA1b1j1FVFnLX8sqzVq7BPtLNqvdxJperp"), // Placeholder BTC identifier
     name: "BTC-PERP",
     price: new anchor.BN(70_000_000_000), // $50,000 in u64 format (6 decimals)
+    maxLeverage: new anchor.BN(10_000_000), // 10x max leverage (6-decimal)
+    maintenanceMarginRatio: new anchor.BN(50_000), // 5% maintenance margin (6-decimal)
   },
 ];
 
@@ -91,6 +95,8 @@ async function checkMarketExists(
  * @param token Token mint public key (identifier)
  * @param name Market name
  * @param price Initial price in u64 format
+ * @param maxLeverage Maximum leverage (6-decimal, e.g. 10_000_000 = 10x)
+ * @param maintenanceMarginRatio Maintenance margin ratio (6-decimal, e.g. 50_000 = 5%)
  * @returns Transaction signature
  */
 async function addMarket(
@@ -100,10 +106,12 @@ async function addMarket(
   oraclePda: PublicKey,
   token: PublicKey,
   name: string,
-  price: anchor.BN
+  price: anchor.BN,
+  maxLeverage: anchor.BN,
+  maintenanceMarginRatio: anchor.BN
 ): Promise<string> {
   const tx = await program.methods
-    .initializeMarketWithOracle(token, name, price)
+    .initializeMarketWithOracle(token, name, price, maxLeverage, maintenanceMarginRatio)
     .accounts({
       authority: wallet.publicKey,
       markets: marketsPda,
@@ -209,7 +217,9 @@ async function main() {
         oraclePda,
         marketConfig.token,
         marketConfig.name,
-        marketConfig.price
+        marketConfig.price,
+        marketConfig.maxLeverage,
+        marketConfig.maintenanceMarginRatio
       );
 
       console.log(`✅ ${marketConfig.name} created!`);

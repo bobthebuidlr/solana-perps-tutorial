@@ -27,13 +27,18 @@ describe("Full Flow Test", () => {
   const INITIAL_PRICE = new BN(100_000_000); // $100 per SOL (6-decimal fixed point)
   const DEPOSIT_AMOUNT = new BN(1000_000_000); // 1000 USDC (6-decimal)
   // Position size is now token quantity in 6-decimal precision (5 SOL = 5_000_000)
-  // At $100/SOL this costs $500 USDC collateral
+  // At $100/SOL with 5x leverage this costs $100 USDC collateral (notional $500 / 5)
   const POSITION_SIZE = new BN(5_000_000); // 5 SOL (6-decimal token qty)
+  const LEVERAGE_1X = new BN(1_000_000); // 1x leverage (6-decimal)
+  const LEVERAGE_5X = new BN(5_000_000); // 5x leverage (6-decimal)
+  const MAX_LEVERAGE = new BN(10_000_000); // 10x max leverage (6-decimal)
+  const MAINTENANCE_MARGIN_RATIO = new BN(50_000); // 5% maintenance margin (6-decimal)
 
   let usdcMint: PublicKey;
   let userTokenAccount: PublicKey;
   let marketsPda: PublicKey;
   let oraclePda: PublicKey;
+  let configPda: PublicKey;
   let vaultPda: PublicKey;
   let userAccountPda: PublicKey;
   let userCollateralPda: PublicKey;
@@ -85,6 +90,11 @@ describe("Full Flow Test", () => {
       program.programId
     );
 
+    [configPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("config")],
+      program.programId
+    );
+
     [vaultPda] = PublicKey.findProgramAddressSync(
       [Buffer.from("vault")],
       program.programId
@@ -112,6 +122,7 @@ describe("Full Flow Test", () => {
     console.log("\n📍 Derived PDAs:");
     console.log("Markets PDA:", marketsPda.toString());
     console.log("Oracle PDA:", oraclePda.toString());
+    console.log("Config PDA:", configPda.toString());
     console.log("Vault PDA:", vaultPda.toString());
     console.log("User Account PDA:", userAccountPda.toString());
     console.log("User Collateral PDA:", userCollateralPda.toString());
@@ -227,7 +238,7 @@ describe("Full Flow Test", () => {
         console.log("✓ Market found:", existingMarket.name);
       } else {
         const tx = await program.methods
-          .initializeMarketWithOracle(SOL_MINT, MARKET_NAME, INITIAL_PRICE)
+          .initializeMarketWithOracle(SOL_MINT, MARKET_NAME, INITIAL_PRICE, MAX_LEVERAGE, MAINTENANCE_MARGIN_RATIO)
           .accounts({
             authority: wallet.publicKey,
             markets: marketsPda,
@@ -284,6 +295,7 @@ describe("Full Flow Test", () => {
         .depositCollateral(DEPOSIT_AMOUNT)
         .accounts({
           user: wallet.publicKey,
+          config: configPda,
           userTokenAccount: userTokenAccount,
           userCollateralTokenAccount: userCollateralPda,
           usdcMint: usdcMint,
@@ -303,12 +315,6 @@ describe("Full Flow Test", () => {
         wallet.publicKey.toString(),
         "Authority should match wallet"
       );
-      assert.equal(
-        userAccount.lockedCollateral.toString(),
-        "0",
-        "Locked collateral should be 0"
-      );
-
       // Verify tokens are in the user's collateral token account (not vault)
       const collateralAccount = await getAccount(connection, userCollateralPda);
       assert.equal(
@@ -321,11 +327,6 @@ describe("Full Flow Test", () => {
       console.log(
         "- Token balance:",
         Number(collateralAccount.amount) / 1_000_000,
-        "USDC"
-      );
-      console.log(
-        "- Locked collateral:",
-        userAccount.lockedCollateral.toNumber() / 1_000_000,
         "USDC"
       );
       console.log("✓ User account verified");
@@ -350,7 +351,7 @@ describe("Full Flow Test", () => {
         const direction = { long: {} };
 
         const tx = await program.methods
-          .openPosition(SOL_MINT, direction, POSITION_SIZE)
+          .openPosition(SOL_MINT, direction, POSITION_SIZE, LEVERAGE_5X)
           .accounts({
             user: wallet.publicKey,
             markets: marketsPda,
@@ -364,6 +365,7 @@ describe("Full Flow Test", () => {
         console.log("Position PDA:", positionPda.toString());
         console.log("Direction: LONG");
         console.log("Size: 5 SOL (token quantity, 6-decimal)");
+        console.log("Leverage: 5x");
       }
 
       // Verify Position exists
@@ -397,21 +399,6 @@ describe("Full Flow Test", () => {
         new Date(position.openedAt.toNumber() * 1000).toISOString()
       );
 
-      // Verify UserAccount locked collateral
-      const userAccount = await program.account.userAccount.fetch(
-        userAccountPda
-      );
-      assert.isTrue(
-        userAccount.lockedCollateral.toNumber() > 0,
-        "Locked collateral should be greater than 0"
-      );
-
-      console.log("\nUpdated User Account:");
-      console.log(
-        "- Locked collateral:",
-        userAccount.lockedCollateral.toNumber() / 1_000_000,
-        "USDC"
-      );
       console.log("✓ Position verified");
     });
 
@@ -608,6 +595,7 @@ describe("Full Flow Test", () => {
           user: wallet.publicKey,
           markets: marketsPda,
           oracle: oraclePda,
+          config: configPda,
           userCollateralTokenAccount: userCollateralPda,
           vault: vaultPda,
         })
@@ -654,16 +642,6 @@ describe("Full Flow Test", () => {
         "Vault should increase by loss amount"
       );
 
-      // Assert locked_collateral is 0
-      const userAccountAfter = await program.account.userAccount.fetch(
-        userAccountPda
-      );
-      assert.equal(
-        userAccountAfter.lockedCollateral.toString(),
-        "0",
-        "locked_collateral should be 0 after close"
-      );
-
       // Assert market OI is cleared
       const marketsAccount = await program.account.markets.fetch(marketsPda);
       const market = marketsAccount.perps.find(
@@ -683,9 +661,9 @@ describe("Full Flow Test", () => {
         "\n🚀 Step 6b: Opening 1-SOL LONG at $80 then closing at $110 (win case)..."
       );
 
-      // Oracle is still at $80 — open a new 1-SOL LONG
+      // Oracle is still at $80 — open a new 1-SOL LONG at 1x leverage
       const openTx = await program.methods
-        .openPosition(SOL_MINT, { long: {} }, POSITION_SIZE_SMALL)
+        .openPosition(SOL_MINT, { long: {} }, POSITION_SIZE_SMALL, LEVERAGE_1X)
         .accounts({
           user: wallet.publicKey,
           markets: marketsPda,
@@ -693,7 +671,7 @@ describe("Full Flow Test", () => {
           userCollateralTokenAccount: userCollateralPda,
         })
         .rpc();
-      console.log("Opened 1-SOL LONG at $80. TX:", openTx);
+      console.log("Opened 1-SOL LONG at $80 (1x leverage). TX:", openTx);
 
       // Update oracle to $110 for the win close
       const updateTx = await program.methods
@@ -734,6 +712,7 @@ describe("Full Flow Test", () => {
           user: wallet.publicKey,
           markets: marketsPda,
           oracle: oraclePda,
+          config: configPda,
           userCollateralTokenAccount: userCollateralPda,
           vault: vaultPda,
         })
@@ -779,16 +758,6 @@ describe("Full Flow Test", () => {
         "Vault should decrease by profit amount"
       );
 
-      // Assert locked_collateral is 0
-      const userAccountAfter = await program.account.userAccount.fetch(
-        userAccountPda
-      );
-      assert.equal(
-        userAccountAfter.lockedCollateral.toString(),
-        "0",
-        "locked_collateral should be 0 after close"
-      );
-
       // Assert market OI is cleared
       const marketsAccount = await program.account.markets.fetch(marketsPda);
       const market = marketsAccount.perps.find(
@@ -808,10 +777,9 @@ describe("Full Flow Test", () => {
     it("should withdraw all available collateral from user's collateral token account", async () => {
       console.log("\n🚀 Step 7: Withdrawing remaining collateral...");
 
-      // Available = token balance - locked
+      // With cross-margin, all collateral is available when no positions are open
       const collateralAccount = await getAccount(connection, userCollateralPda);
-      const userAccount = await program.account.userAccount.fetch(userAccountPda);
-      const available = BigInt(collateralAccount.amount.toString()) - BigInt(userAccount.lockedCollateral.toString());
+      const available = collateralAccount.amount;
 
       console.log(
         "Available to withdraw:",
@@ -828,8 +796,11 @@ describe("Full Flow Test", () => {
         .accounts({
           user: wallet.publicKey,
           userAccount: userAccountPda,
+          config: configPda,
           userCollateralTokenAccount: userCollateralPda,
           userTokenAccount: userTokenAccount,
+          markets: marketsPda,
+          oracle: oraclePda,
         })
         .rpc();
 
@@ -854,6 +825,159 @@ describe("Full Flow Test", () => {
       );
 
       console.log("✓ All withdraw collateral assertions passed");
+    });
+  });
+
+  describe("Step 8: Leverage-specific Tests", () => {
+    it("should verify leveraged position locks correct collateral", async () => {
+      console.log("\n🚀 Step 8a: Testing leveraged collateral calculation...");
+
+      // Deposit more collateral for testing
+      await mintTo(
+        connection,
+        wallet.payer,
+        usdcMint,
+        userCollateralPda,
+        wallet.publicKey,
+        2_000_000_000 // 2,000 USDC
+      );
+
+      // Update oracle to $100
+      await program.methods
+        .updateOracle(SOL_MINT, INITIAL_PRICE)
+        .accounts({ oracle: oraclePda })
+        .rpc();
+
+      // Open 5 SOL LONG at 5x leverage ($100 price)
+      // Notional = 5 * $100 = $500, Collateral = $500 / 5 = $100
+      const tx = await program.methods
+        .openPosition(SOL_MINT, { long: {} }, POSITION_SIZE, LEVERAGE_5X)
+        .accounts({
+          user: wallet.publicKey,
+          markets: marketsPda,
+          oracle: oraclePda,
+          userCollateralTokenAccount: userCollateralPda,
+        })
+        .rpc();
+      console.log("Opened 5-SOL LONG at 5x leverage. TX:", tx);
+
+      const position = await program.account.position.fetch(positionPda);
+      const expectedCollateral = 100_000_000; // $100 USDC in 6-decimal
+      assert.equal(
+        position.collateral.toNumber(),
+        expectedCollateral,
+        "Collateral should be notional/leverage = $500/$5 = $100"
+      );
+
+      // Verify OI tracks notional, not collateral
+      const marketsAccount = await program.account.markets.fetch(marketsPda);
+      const market = marketsAccount.perps.find(
+        (m) => m.tokenMint.toString() === SOL_MINT.toString()
+      );
+      const expectedNotional = 500_000_000; // $500 USDC in 6-decimal
+      assert.equal(
+        market.totalLongOi.toString(),
+        expectedNotional.toString(),
+        "OI should track notional value ($500), not collateral ($100)"
+      );
+
+      console.log("✓ Leveraged collateral calculation verified");
+      console.log("  Collateral locked: $" + position.collateral.toNumber() / 1_000_000);
+      console.log("  OI (notional): $" + market.totalLongOi.toNumber() / 1_000_000);
+
+      // Close the position for cleanup
+      await program.methods
+        .closePosition(SOL_MINT)
+        .accounts({
+          user: wallet.publicKey,
+          markets: marketsPda,
+          oracle: oraclePda,
+          config: configPda,
+          userCollateralTokenAccount: userCollateralPda,
+          vault: vaultPda,
+        })
+        .rpc();
+      console.log("✓ Position closed for cleanup");
+    });
+
+    it("should reject leverage exceeding market max", async () => {
+      console.log("\n🚀 Step 8b: Testing max leverage enforcement...");
+
+      const LEVERAGE_20X = new BN(20_000_000); // 20x — exceeds 10x max
+
+      try {
+        await program.methods
+          .openPosition(SOL_MINT, { long: {} }, POSITION_SIZE, LEVERAGE_20X)
+          .accounts({
+            user: wallet.publicKey,
+            markets: marketsPda,
+            oracle: oraclePda,
+            userCollateralTokenAccount: userCollateralPda,
+          })
+          .rpc();
+        assert.fail("Should have rejected leverage exceeding max");
+      } catch (error) {
+        console.log("✓ Correctly rejected 20x leverage (max is 10x)");
+        assert.include(error.toString(), "ExceedsMaxLeverage");
+      }
+    });
+
+    it("should amplify PnL with leverage", async () => {
+      console.log("\n🚀 Step 8c: Testing PnL amplification with leverage...");
+
+      // Open 5 SOL LONG at $100 with 5x leverage (collateral = $100)
+      await program.methods
+        .openPosition(SOL_MINT, { long: {} }, POSITION_SIZE, LEVERAGE_5X)
+        .accounts({
+          user: wallet.publicKey,
+          markets: marketsPda,
+          oracle: oraclePda,
+          userCollateralTokenAccount: userCollateralPda,
+        })
+        .rpc();
+
+      // Price goes to $120 (20% increase)
+      const NEW_PRICE = new BN(120_000_000);
+      await program.methods
+        .updateOracle(SOL_MINT, NEW_PRICE)
+        .accounts({ oracle: oraclePda })
+        .rpc();
+
+      // PnL = 5 SOL * ($120 - $100) = $100 profit
+      // On $100 collateral this is 100% return (5x leveraged 20% move)
+      const positionInfo = await program.methods
+        .viewPositionPnl(SOL_MINT)
+        .accounts({
+          markets: marketsPda,
+          position: positionPda,
+          oracle: oraclePda,
+        })
+        .view();
+
+      const pricePnl = positionInfo.pnlInfo.price.toNumber();
+      const expectedPnl = 100_000_000; // $100 profit
+      assert.equal(pricePnl, expectedPnl, "PnL should be $100 (5 SOL * $20 move)");
+
+      const position = await program.account.position.fetch(positionPda);
+      const returnPct = (pricePnl / position.collateral.toNumber()) * 100;
+      console.log("  Collateral: $" + position.collateral.toNumber() / 1_000_000);
+      console.log("  PnL: $" + pricePnl / 1_000_000);
+      console.log("  Return: " + returnPct.toFixed(0) + "% (5x leveraged 20% price move)");
+      assert.equal(returnPct, 100, "Return should be 100% (5x * 20%)");
+
+      // Close and clean up
+      await program.methods
+        .closePosition(SOL_MINT)
+        .accounts({
+          user: wallet.publicKey,
+          markets: marketsPda,
+          oracle: oraclePda,
+          config: configPda,
+          userCollateralTokenAccount: userCollateralPda,
+          vault: vaultPda,
+        })
+        .rpc();
+      console.log("✓ PnL amplification verified");
     });
   });
 

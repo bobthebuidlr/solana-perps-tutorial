@@ -5,8 +5,8 @@ import { useCallback, useState } from "react";
 import { PERPS_PROGRAM_ADDRESS } from "../generated/perps";
 import { getClosePositionInstructionDataEncoder } from "../generated/perps/instructions/closePosition";
 import { TOKEN_PROGRAM_ADDRESS } from "../lib/constants";
-import { derivePositionPda, deriveUserCollateralPda, deriveVaultPda } from "../lib/pdas";
-import { useMarketsPda, useOraclePda, useUserAccountPda } from "./usePdas";
+import { deriveConfigPda, derivePositionPda, deriveUserCollateralPda, deriveVaultPda } from "../lib/pdas";
+import { useConfigPda, useMarketsPda, useOraclePda, useUserAccountPda } from "./usePdas";
 
 /**
  * Hook to close an open perpetual futures position on-chain.
@@ -27,6 +27,7 @@ export function useClosePosition() {
   const userAccountAddress = useUserAccountPda(walletAddress);
   const marketsAddress = useMarketsPda();
   const oracleAddress = useOraclePda();
+  const configAddress = useConfigPda();
 
   /**
    * Sends a closePosition instruction for the given market.
@@ -36,7 +37,7 @@ export function useClosePosition() {
    */
   const closePosition = useCallback(
     async (tokenMint: Address): Promise<string | null> => {
-      if (!walletAddress || !wallet || !userAccountAddress || !marketsAddress || !oracleAddress) {
+      if (!walletAddress || !wallet || !userAccountAddress || !marketsAddress || !oracleAddress || !configAddress) {
         console.error("❌ ClosePosition: missing required accounts");
         return null;
       }
@@ -55,6 +56,7 @@ export function useClosePosition() {
             { address: positionAddress, role: 1 },            // position (Writable)
             { address: marketsAddress, role: 1 },             // markets (Writable)
             { address: oracleAddress, role: 0 },              // oracle (Readonly)
+            { address: configAddress, role: 0 },              // config (Readonly)
             { address: userCollateralAddress, role: 1 },      // userCollateralTokenAccount (Writable)
             { address: vaultAddress, role: 1 },               // vault (Writable)
             { address: TOKEN_PROGRAM_ADDRESS, role: 0 },      // tokenProgram (Readonly)
@@ -78,7 +80,7 @@ export function useClosePosition() {
         setIsLoading(false);
       }
     },
-    [send, walletAddress, wallet, userAccountAddress, marketsAddress, oracleAddress, queryClient]
+    [send, walletAddress, wallet, userAccountAddress, marketsAddress, oracleAddress, configAddress, queryClient]
   );
 
   return { closePosition, isLoading, error };

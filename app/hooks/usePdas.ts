@@ -8,6 +8,27 @@ import { useEffect, useState } from "react";
 import { PERPS_PROGRAM_ADDRESS } from "../generated/perps/programs/perps";
 
 /**
+ * Derives and caches the protocol config PDA on mount.
+ * @returns Config PDA address, or null while deriving.
+ */
+export function useConfigPda(): Address | null {
+  const [pda, setPda] = useState<Address | null>(null);
+
+  useEffect(() => {
+    getProgramDerivedAddress({
+      programAddress: PERPS_PROGRAM_ADDRESS,
+      seeds: [
+        getBytesEncoder().encode(
+          new Uint8Array([99, 111, 110, 102, 105, 103]) // "config"
+        ),
+      ],
+    }).then(([derived]) => setPda(derived));
+  }, []);
+
+  return pda;
+}
+
+/**
  * Derives and caches the markets PDA on mount.
  * @returns Markets PDA address, or null while deriving.
  */

@@ -26,8 +26,10 @@ pub mod perps {
         token: Pubkey,
         name: String,
         price: u64,
+        max_leverage: u64,
+        maintenance_margin_ratio: u64,
     ) -> Result<()> {
-        initialize_market_with_oracle::handler(ctx, token, name, price)
+        initialize_market_with_oracle::handler(ctx, token, name, price, max_leverage, maintenance_margin_ratio)
     }
 
     pub fn update_oracle(ctx: Context<UpdateOracle>, token: Pubkey, new_price: u64) -> Result<()> {
@@ -38,13 +40,14 @@ pub mod perps {
         deposit_collateral::handler(ctx, amount)
     }
 
-    pub fn open_position(
-        ctx: Context<OpenPosition>,
+    pub fn open_position<'info>(
+        ctx: Context<'_, '_, 'info, 'info, OpenPosition<'info>>,
         token_mint: Pubkey,
         direction: PositionDirection,
         amount: u64,
+        leverage: u64,
     ) -> Result<()> {
-        open_position::handler(ctx, token_mint, direction, amount)
+        open_position::handler(ctx, token_mint, direction, amount, leverage)
     }
 
     pub fn view_position_pnl(
@@ -62,7 +65,7 @@ pub mod perps {
         close_position::handler(ctx, token_mint)
     }
 
-    pub fn withdraw_collateral(ctx: Context<WithdrawCollateral>, amount: u64) -> Result<()> {
+    pub fn withdraw_collateral<'info>(ctx: Context<'_, '_, 'info, 'info, WithdrawCollateral<'info>>, amount: u64) -> Result<()> {
         withdraw_collateral::handler(ctx, amount)
     }
 }

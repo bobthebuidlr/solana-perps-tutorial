@@ -3,7 +3,8 @@ use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
 use crate::{
     calculate_funding_pnl, calculate_price_pnl, constants::*, error::ErrorCode,
-    update_funding_indices, Markets, Oracle, Position, PositionDirection, UserAccount,
+    update_funding_indices, Markets, Oracle, Position, PositionDirection, ProtocolConfig,
+    UserAccount,
 };
 
 #[derive(Accounts)]
@@ -36,11 +37,19 @@ pub struct ClosePosition<'info> {
 
     pub oracle: Account<'info, Oracle>,
 
+    /// Protocol config — validates accepted USDC mint
+    #[account(
+        seeds = [CONFIG_SEED],
+        bump = config.bump
+    )]
+    pub config: Account<'info, ProtocolConfig>,
+
     /// Per-user collateral token account PDA
     #[account(
         mut,
         seeds = [USER_COLLATERAL_SEED, user.key().as_ref()],
-        bump
+        bump,
+        token::mint = config.usdc_mint
     )]
     pub user_collateral_token_account: Account<'info, TokenAccount>,
 
@@ -48,7 +57,8 @@ pub struct ClosePosition<'info> {
     #[account(
         mut,
         seeds = [VAULT_SEED],
-        bump
+        bump,
+        token::mint = config.usdc_mint
     )]
     pub vault: Account<'info, TokenAccount>,
 
@@ -96,11 +106,21 @@ pub fn handler(ctx: Context<ClosePosition>, token_mint: Pubkey) -> Result<()> {
     let position_collateral = position.collateral;
     let position_direction = position.direction;
 
+    // Compute entry notional for OI adjustment (position_size * entry_price / 10^6)
+    let entry_notional = (position.position_size as u128)
+        .checked_mul(position.entry_price as u128)
+        .ok_or(ErrorCode::ArithmeticOverflow)?
+        .checked_div(1_000_000u128)
+        .ok_or(ErrorCode::ArithmeticOverflow)? as u64;
+
     // Settle PnL with actual token transfers
     if total_pnl < 0 {
         // User lost — transfer loss from user collateral to vault
+        // Cap loss at position collateral (with leverage, losses can exceed margin)
         let abs_loss = total_pnl.unsigned_abs();
-        let loss_amount = abs_loss.min(ctx.accounts.user_collateral_token_account.amount);
+        let loss_amount = abs_loss
+            .min(position_collateral)
+            .min(ctx.accounts.user_collateral_token_account.amount);
 
         if loss_amount > 0 {
             let user_key = ctx.accounts.user.key();
@@ -155,25 +175,18 @@ pub fn handler(ctx: Context<ClosePosition>, token_mint: Pubkey) -> Result<()> {
         token::transfer(cpi_ctx, profit_amount)?;
     }
 
-    // Unlock position collateral
-    let user_account = &mut ctx.accounts.user_account;
-    user_account.locked_collateral = user_account
-        .locked_collateral
-        .checked_sub(position_collateral)
-        .ok_or(ErrorCode::ArithmeticOverflow)?;
-
-    // Decrease market OI
+    // Decrease market OI by entry notional (matches what was added on open)
     match position_direction {
         PositionDirection::Long => {
             perps_market.total_long_oi = perps_market
                 .total_long_oi
-                .checked_sub(position_collateral)
+                .checked_sub(entry_notional)
                 .ok_or(ErrorCode::ArithmeticOverflow)?;
         }
         PositionDirection::Short => {
             perps_market.total_short_oi = perps_market
                 .total_short_oi
-                .checked_sub(position_collateral)
+                .checked_sub(entry_notional)
                 .ok_or(ErrorCode::ArithmeticOverflow)?;
         }
     }

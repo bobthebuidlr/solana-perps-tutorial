@@ -5,6 +5,16 @@ use crate::MAX_MARKETS;
 
 #[account]
 #[derive(InitSpace, Debug)]
+pub struct ProtocolConfig {
+    /// The accepted USDC mint for all collateral and vault operations
+    pub usdc_mint: Pubkey,
+
+    /// PDA bump seed
+    pub bump: u8,
+}
+
+#[account]
+#[derive(InitSpace, Debug)]
 pub struct Markets {
     #[max_len(MAX_MARKETS)]
     pub perps: Vec<PerpsMarket>,
@@ -33,6 +43,12 @@ pub struct PerpsMarket {
 
     /// Last funding update timestamp
     pub last_funding_update: i64,
+
+    /// Maximum leverage allowed (6-decimal, e.g. 10_000_000 = 10x)
+    pub max_leverage: u64,
+
+    /// Maintenance margin ratio (6-decimal, e.g. 50_000 = 5%)
+    pub maintenance_margin_ratio: u64,
 }
 
 #[account]

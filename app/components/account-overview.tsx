@@ -2,43 +2,90 @@
 
 import { type Address } from "@solana/kit";
 import { useWalletConnection } from "@solana/react-hooks";
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
+import { type Position } from "../generated/perps/accounts/position";
+import { PositionDirection } from "../generated/perps/types/positionDirection";
 import { useCollateral } from "../hooks/useCollateral";
+import { useMarkets } from "../hooks/useMarkets";
+import { useOraclePrices } from "../hooks/useOraclePrices";
 import { usePositions } from "../hooks/usePositions";
-import { usePositionPnl } from "../hooks/usePositionPnl";
 import { useDeposit } from "../hooks/useDeposit";
 import { useWithdraw } from "../hooks/useWithdraw";
 import { useTokenAccount } from "../hooks/useTokenAccount";
 import { useTokenBalance } from "../hooks/useTokenBalance";
 import { formatUsdc } from "../lib/format";
-import { USDC_DECIMALS, USDC_MINT_ADDRESS } from "../lib/constants";
+import { USDC_DECIMALS, TOKEN_DECIMALS, USDC_MINT_ADDRESS } from "../lib/constants";
 
 
 /**
  * Account overview component showing user's trading account status.
- * Displays available collateral, locked collateral, unrealized PnL, and total equity.
+ * Hyperliquid-style: Portfolio Value, Unrealized PNL, Maintenance Margin, Account Leverage.
  */
 export function AccountOverview() {
   const { wallet } = useWalletConnection();
   const walletAddress = wallet?.account.address;
-  
-  const {
-    collateral,
-    lockedCollateral,
-    isLoading: collateralLoading,
-  } = useCollateral();
+
+  const { balance, isLoading: collateralLoading } = useCollateral();
   const { positions, isLoading: positionsLoading } = usePositions();
+  const { markets } = useMarkets();
+  const { prices: oraclePrices } = useOraclePrices();
 
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
 
-  const availableCollateral = collateral ?? 0n;
-  const locked = lockedCollateral ?? 0n;
-  
-  // Calculate total unrealized PnL from all positions
-  const [totalUnrealizedPnl, setTotalUnrealizedPnl] = useState(0n);
-  
-  const totalEquity = availableCollateral + locked + totalUnrealizedPnl;
+  const collateralBalance = balance ?? 0n;
+
+  // Client-side PnL, notional, and maintenance margin calculation across all positions
+  const { totalUnrealizedPnl, totalNotional, totalMaintenanceMargin } = useMemo(() => {
+    let pnl = 0n;
+    let notional = 0n;
+    let maintenance = 0n;
+    for (const position of positions) {
+      const price = oraclePrices?.find(
+        (p) => p.tokenMint.toString() === position.perpsMarket.toString()
+      )?.price;
+      const market = markets?.find(
+        (m) => m.tokenMint.toString() === position.perpsMarket.toString()
+      );
+      if (!price) continue;
+
+      // Notional at current price
+      const posNotional = position.positionSize * price / BigInt(10 ** TOKEN_DECIMALS);
+      notional += posNotional;
+
+      // Maintenance margin: notional * maintenance_margin_ratio / 1_000_000
+      if (market) {
+        maintenance += posNotional * market.maintenanceMarginRatio / BigInt(1_000_000);
+      }
+
+      // Price PnL
+      const isLong = position.direction === PositionDirection.Long;
+      const pricePnl = isLong
+        ? (position.positionSize * price - position.positionSize * position.entryPrice) / BigInt(10 ** TOKEN_DECIMALS)
+        : (position.positionSize * position.entryPrice - position.positionSize * price) / BigInt(10 ** TOKEN_DECIMALS);
+
+      // Funding PnL
+      let fundingPnl = 0n;
+      if (market) {
+        const currentIndex = isLong ? market.cumulativeFundingLong : market.cumulativeFundingShort;
+        const indexDiff = currentIndex - position.entryFundingIndex;
+        const payment = indexDiff * position.collateral / BigInt(1_000_000);
+        fundingPnl = isLong ? -payment : payment;
+      }
+
+      pnl += pricePnl + fundingPnl;
+    }
+    return { totalUnrealizedPnl: pnl, totalNotional: notional, totalMaintenanceMargin: maintenance };
+  }, [positions, oraclePrices, markets]);
+
+  // Portfolio value = collateral balance + unrealized PnL
+  const portfolioValue = collateralBalance + (totalUnrealizedPnl >= 0n ? totalUnrealizedPnl : 0n)
+    - (totalUnrealizedPnl < 0n ? -totalUnrealizedPnl : 0n);
+
+  // Account leverage = total notional / portfolio value
+  const accountLeverage = portfolioValue > 0n
+    ? Number(totalNotional) / Number(portfolioValue)
+    : 0;
 
   if (!walletAddress) {
     return (
@@ -76,7 +123,7 @@ export function AccountOverview() {
             </button>
             <button
               onClick={() => setWithdrawOpen(true)}
-              disabled={isLoading || (availableCollateral ?? 0n) <= 0n}
+              disabled={isLoading || collateralBalance <= 0n}
               className="rounded-lg border border-border-low bg-card px-3 py-1.5 text-xs font-medium text-muted transition hover:-translate-y-0.5 hover:text-foreground hover:shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Withdraw
@@ -84,111 +131,61 @@ export function AccountOverview() {
           </div>
         </div>
 
-        {/* Total Equity */}
-        <div className="mb-6 rounded-xl bg-gradient-to-br from-foreground/5 to-foreground/10 p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted mb-2">
-            Total Equity
-          </p>
-          <p className="text-2xl font-bold tabular-nums">
-            {isLoading ? (
-              <span className="inline-block h-7 w-32 animate-pulse rounded bg-cream/50" />
-            ) : (
-              formatUsdc(totalEquity)
-            )}
-          </p>
-          <p className="text-xs text-muted mt-1">USDC</p>
-        </div>
-
-        {/* Equity breakdown */}
-        <div className="space-y-4">
-          {/* Available Collateral */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-green-500" />
-                <span className="text-sm font-medium">Available</span>
-              </div>
-              <span className="font-mono text-sm tabular-nums">
-                {isLoading ? (
-                  <span className="inline-block h-4 w-20 animate-pulse rounded bg-cream/50" />
-                ) : (
-                  formatUsdc(availableCollateral)
-                )}
-              </span>
-            </div>
+        {/* Hyperliquid-style account stats */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted">Portfolio Value</span>
+            <span className="font-mono text-sm font-semibold tabular-nums">
+              {isLoading ? (
+                <span className="inline-block h-4 w-20 animate-pulse rounded bg-cream/50" />
+              ) : (
+                `${formatUsdc(portfolioValue)} USDC`
+              )}
+            </span>
           </div>
 
-          {/* Locked Collateral */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-yellow-500" />
-                <span className="text-sm font-medium">Locked</span>
-              </div>
-              <span className="font-mono text-sm tabular-nums">
-                {isLoading ? (
-                  <span className="inline-block h-4 w-20 animate-pulse rounded bg-cream/50" />
-                ) : (
-                  formatUsdc(locked)
-                )}
-              </span>
-            </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted">Unrealized PNL</span>
+            <span
+              className={`font-mono text-sm font-semibold tabular-nums ${
+                totalUnrealizedPnl > 0n
+                  ? "text-green-600"
+                  : totalUnrealizedPnl < 0n
+                    ? "text-red-500"
+                    : ""
+              }`}
+            >
+              {isLoading ? (
+                <span className="inline-block h-4 w-20 animate-pulse rounded bg-cream/50" />
+              ) : (
+                `${totalUnrealizedPnl >= 0n ? "+" : "-"}${formatUsdc(totalUnrealizedPnl >= 0n ? totalUnrealizedPnl : -totalUnrealizedPnl)} USDC`
+              )}
+            </span>
           </div>
 
-          {/* Unrealized PnL */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span
-                  className={`h-2 w-2 rounded-full ${
-                    totalUnrealizedPnl >= 0n ? "bg-blue-500" : "bg-red-500"
-                  }`}
-                />
-                <span className="text-sm font-medium">Unrealized PnL</span>
-              </div>
-              <span
-                className={`font-mono text-sm tabular-nums ${
-                  totalUnrealizedPnl >= 0n ? "text-green-600" : "text-red-500"
-                }`}
-              >
-                {isLoading ? (
-                  <span className="inline-block h-4 w-20 animate-pulse rounded bg-cream/50" />
-                ) : (
-                  <>
-                    {totalUnrealizedPnl >= 0n ? "+" : "-"}
-                    {formatUsdc(totalUnrealizedPnl >= 0n ? totalUnrealizedPnl : -totalUnrealizedPnl)}
-                  </>
-                )}
-              </span>
-            </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted">Perps Maintenance Margin</span>
+            <span className="font-mono text-sm font-semibold tabular-nums">
+              {isLoading ? (
+                <span className="inline-block h-4 w-20 animate-pulse rounded bg-cream/50" />
+              ) : (
+                `${formatUsdc(totalMaintenanceMargin)} USDC`
+              )}
+            </span>
           </div>
-        </div>
 
-        {/* Divider */}
-        <div className="my-4 border-t border-border-low" />
-
-        {/* Summary stats */}
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <p className="text-xs text-muted">Positions</p>
-            <p className="font-semibold">{positions.length}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted">Utilization</p>
-            <p className="font-semibold">
-              {availableCollateral + locked > 0n
-                ? `${Math.round(Number(locked * 100n / (availableCollateral + locked)))}%`
-                : "0%"}
-            </p>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted">Account Leverage</span>
+            <span className="font-mono text-sm font-semibold tabular-nums">
+              {isLoading ? (
+                <span className="inline-block h-4 w-20 animate-pulse rounded bg-cream/50" />
+              ) : (
+                `${accountLeverage.toFixed(2)}x`
+              )}
+            </span>
           </div>
         </div>
       </div>
-      
-      {/* PnL aggregator component - handles fetching PnL for all positions */}
-      <PnLAggregator 
-        positions={positions} 
-        onPnlUpdate={setTotalUnrealizedPnl}
-      />
       
       {/* Deposit Dialog */}
       {depositOpen && (
@@ -207,85 +204,11 @@ export function AccountOverview() {
           onSuccess={() => {
             setWithdrawOpen(false);
           }}
-          maxAmount={availableCollateral ?? 0n}
+          maxAmount={collateralBalance}
         />
       )}
     </div>
   );
-}
-
-/**
- * Component that aggregates PnL from multiple positions.
- * Uses a shared context to collect PnL values from multiple hooks.
- */
-function PnLAggregator({ 
-  positions, 
-  onPnlUpdate 
-}: { 
-  positions: Array<{ perpsMarket: { toString: () => string } }>;
-  onPnlUpdate: (total: bigint) => void;
-}) {
-  const [pnlMap, setPnlMap] = useState<Map<string, bigint>>(new Map());
-  
-  // Calculate total whenever pnlMap changes
-  useEffect(() => {
-    const total = Array.from(pnlMap.values()).reduce((sum, val) => sum + val, 0n);
-    onPnlUpdate(total);
-  }, [pnlMap, onPnlUpdate]);
-  
-  // Clear PnL when no positions
-  useEffect(() => {
-    if (positions.length === 0) {
-      setPnlMap(new Map());
-      onPnlUpdate(0n);
-    }
-  }, [positions.length, onPnlUpdate]);
-  
-  return (
-    <>
-      {positions.map((position) => (
-        <SinglePositionPnL
-          key={position.perpsMarket.toString()}
-          tokenMint={position.perpsMarket as Address}
-          onPnlChange={(pnl) => {
-            setPnlMap(prev => {
-              const newMap = new Map(prev);
-              if (pnl !== null) {
-                newMap.set(position.perpsMarket.toString(), pnl);
-              } else {
-                newMap.delete(position.perpsMarket.toString());
-              }
-              return newMap;
-            });
-          }}
-        />
-      ))}
-    </>
-  );
-}
-
-/**
- * Component to handle PnL for a single position.
- */
-function SinglePositionPnL({ 
-  tokenMint, 
-  onPnlChange 
-}: { 
-  tokenMint: Address;
-  onPnlChange: (pnl: bigint | null) => void;
-}) {
-  const { pnl } = usePositionPnl(tokenMint);
-  
-  useEffect(() => {
-    if (pnl) {
-      const totalPnl = pnl.price + pnl.funding;
-      onPnlChange(totalPnl);
-    } else {
-      onPnlChange(null);
-    }
-  }, [pnl, onPnlChange]);
-  
-  return null;
 }
 
 /**

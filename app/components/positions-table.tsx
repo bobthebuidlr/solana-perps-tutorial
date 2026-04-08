@@ -8,7 +8,6 @@ import { PositionDirection } from "../generated/perps/types/positionDirection";
 import { useClosePosition } from "../hooks/useClosePosition";
 import { useMarkets } from "../hooks/useMarkets";
 import { useOraclePrices } from "../hooks/useOraclePrices";
-import { usePositionPnl } from "../hooks/usePositionPnl";
 import { usePositions } from "../hooks/usePositions";
 import { USDC_DECIMALS, TOKEN_DECIMALS } from "../lib/constants";
 import { formatUsdc, getSymbol, iconColorClass } from "../lib/format";
@@ -218,10 +217,25 @@ function PositionRow({
   currentPrice: bigint | null;
 }) {
   const { closePosition, isLoading: isClosing } = useClosePosition();
-  const { pnl, isLoading: isPnlLoading } = usePositionPnl(
-    position.perpsMarket as Address
-  );
   const isLong = position.direction === PositionDirection.Long;
+
+  // Client-side price PnL — same formula as on-chain calculate_price_pnl
+  const pricePnl = currentPrice !== null
+    ? isLong
+      ? (position.positionSize * currentPrice - position.positionSize * position.entryPrice) / BigInt(10 ** TOKEN_DECIMALS)
+      : (position.positionSize * position.entryPrice - position.positionSize * currentPrice) / BigInt(10 ** TOKEN_DECIMALS)
+    : null;
+
+  // Client-side funding PnL — uses cumulative funding indices from market
+  let fundingPnl: bigint | null = null;
+  if (market) {
+    const currentIndex = isLong ? market.cumulativeFundingLong : market.cumulativeFundingShort;
+    const indexDiff = currentIndex - position.entryFundingIndex;
+    const payment = indexDiff * position.collateral / BigInt(1_000_000);
+    fundingPnl = isLong ? -payment : payment;
+  }
+
+  const totalPnl = pricePnl !== null && fundingPnl !== null ? pricePnl + fundingPnl : null;
   const name =
     market?.name ?? `${position.perpsMarket.toString().slice(0, 6)}…`;
   const symbol = market ? getSymbol(market.name) : "?";
@@ -288,11 +302,9 @@ function PositionRow({
 
       {/* Price PnL — profit/loss from price movement */}
       <td className="py-3.5 px-4 text-right font-mono tabular-nums">
-        {isPnlLoading ? (
-          <span className="inline-block h-4 w-14 animate-pulse rounded bg-cream/50" />
-        ) : pnl ? (
-          <span className={pnlColorClass(pnl.price)}>
-            {formatPnl(pnl.price)}
+        {pricePnl !== null ? (
+          <span className={pnlColorClass(pricePnl)}>
+            {formatPnl(pricePnl)}
           </span>
         ) : (
           <span className="text-muted">—</span>
@@ -301,11 +313,9 @@ function PositionRow({
 
       {/* Funding PnL — accrued funding cost/income */}
       <td className="py-3.5 px-4 text-right font-mono tabular-nums">
-        {isPnlLoading ? (
-          <span className="inline-block h-4 w-14 animate-pulse rounded bg-cream/50" />
-        ) : pnl ? (
-          <span className={pnlColorClass(pnl.funding)}>
-            {formatPnl(pnl.funding)}
+        {fundingPnl !== null ? (
+          <span className={pnlColorClass(fundingPnl)}>
+            {formatPnl(fundingPnl)}
           </span>
         ) : (
           <span className="text-muted">—</span>

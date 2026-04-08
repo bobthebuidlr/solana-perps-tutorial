@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::{constants::*, error::ErrorCode, PerpsMarket, Position, PositionDirection};
+use crate::{constants::*, error::ErrorCode, Markets, Oracle, PerpsMarket, Position, PositionDirection};
 
 /// Calculate price-based PnL for a position.
 /// position_size is token quantity (6-decimal), prices are 6-decimal fixed point.
@@ -34,6 +34,80 @@ pub fn calculate_price_pnl(position: &Position, current_price: u64) -> Result<i6
             .checked_sub(value_after)
             .ok_or(ErrorCode::ArithmeticOverflow)? as i64),
     }
+}
+
+/// Computes the notional value of a position at a given price.
+/// @param position - The position account.
+/// @param price - The price to compute notional at (6-decimal fixed point).
+/// @returns Notional value in USDC base units (6-decimal).
+pub fn position_notional_at_price(position: &Position, price: u64) -> Result<u64> {
+    Ok(((position.position_size as u128)
+        .checked_mul(price as u128)
+        .ok_or(ErrorCode::ArithmeticOverflow)?
+        .checked_div(1_000_000u128)
+        .ok_or(ErrorCode::ArithmeticOverflow)?) as u64)
+}
+
+/// Calculates cross-margin account health across all open positions.
+/// @param positions - Slice of all user's open positions.
+/// @param markets - The Markets account containing all perps markets.
+/// @param oracle - The Oracle account containing all prices.
+/// @param token_balance - Current USDC balance in the user's collateral token account.
+/// @returns (total_equity, total_maintenance_margin) — healthy when equity >= maintenance_margin.
+pub fn calculate_account_health(
+    positions: &[Position],
+    markets: &Markets,
+    oracle: &Oracle,
+    token_balance: u64,
+) -> Result<(i64, u64)> {
+    let mut total_unrealized_pnl: i64 = 0;
+    let mut total_maintenance_margin: u128 = 0;
+
+    for position in positions {
+        // Find the market and oracle price for this position
+        let perps_market = markets
+            .perps
+            .iter()
+            .find(|m| m.token_mint == position.perps_market)
+            .ok_or(error!(ErrorCode::MarketNotFound))?;
+
+        let current_price = oracle
+            .prices
+            .iter()
+            .find(|p| p.token_mint == position.perps_market)
+            .ok_or(error!(ErrorCode::OraclePriceNotFound))?
+            .price;
+
+        // Calculate unrealized PnL for this position
+        let price_pnl = calculate_price_pnl(position, current_price)?;
+        let funding_pnl = calculate_funding_pnl(position, perps_market, None)?;
+        let position_pnl = price_pnl
+            .checked_add(funding_pnl)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+        total_unrealized_pnl = total_unrealized_pnl
+            .checked_add(position_pnl)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+        // Calculate maintenance margin for this position: notional_at_current_price * maintenance_margin_ratio / MARGIN_PRECISION
+        let notional = position_notional_at_price(position, current_price)? as u128;
+        let maintenance = notional
+            .checked_mul(perps_market.maintenance_margin_ratio as u128)
+            .ok_or(ErrorCode::ArithmeticOverflow)?
+            .checked_div(MARGIN_PRECISION as u128)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+        total_maintenance_margin = total_maintenance_margin
+            .checked_add(maintenance)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+    }
+
+    // total_equity = token_balance + total_unrealized_pnl
+    let total_equity = (token_balance as i64)
+        .checked_add(total_unrealized_pnl)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+    Ok((total_equity, total_maintenance_margin as u64))
 }
 
 /// Calculate the current funding rate based on OI imbalance

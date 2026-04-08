@@ -81,12 +81,16 @@ export type InitializeMarketWithOracleInstructionData = {
   token: Address;
   name: string;
   price: bigint;
+  maxLeverage: bigint;
+  maintenanceMarginRatio: bigint;
 };
 
 export type InitializeMarketWithOracleInstructionDataArgs = {
   token: Address;
   name: string;
   price: number | bigint;
+  maxLeverage: number | bigint;
+  maintenanceMarginRatio: number | bigint;
 };
 
 export function getInitializeMarketWithOracleInstructionDataEncoder(): Encoder<InitializeMarketWithOracleInstructionDataArgs> {
@@ -96,6 +100,8 @@ export function getInitializeMarketWithOracleInstructionDataEncoder(): Encoder<I
       ["token", getAddressEncoder()],
       ["name", addEncoderSizePrefix(getUtf8Encoder(), getU32Encoder())],
       ["price", getU64Encoder()],
+      ["maxLeverage", getU64Encoder()],
+      ["maintenanceMarginRatio", getU64Encoder()],
     ]),
     (value) => ({
       ...value,
@@ -110,6 +116,8 @@ export function getInitializeMarketWithOracleInstructionDataDecoder(): Decoder<I
     ["token", getAddressDecoder()],
     ["name", addDecoderSizePrefix(getUtf8Decoder(), getU32Decoder())],
     ["price", getU64Decoder()],
+    ["maxLeverage", getU64Decoder()],
+    ["maintenanceMarginRatio", getU64Decoder()],
   ]);
 }
 

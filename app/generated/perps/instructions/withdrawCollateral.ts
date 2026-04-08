@@ -58,6 +58,8 @@ export type WithdrawCollateralInstruction<
   TAccountUserCollateralTokenAccount extends string | AccountMeta<string> =
     string,
   TAccountUserTokenAccount extends string | AccountMeta<string> = string,
+  TAccountMarkets extends string | AccountMeta<string> = string,
+  TAccountOracle extends string | AccountMeta<string> = string,
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
@@ -77,6 +79,12 @@ export type WithdrawCollateralInstruction<
       TAccountUserTokenAccount extends string
         ? WritableAccount<TAccountUserTokenAccount>
         : TAccountUserTokenAccount,
+      TAccountMarkets extends string
+        ? ReadonlyAccount<TAccountMarkets>
+        : TAccountMarkets,
+      TAccountOracle extends string
+        ? ReadonlyAccount<TAccountOracle>
+        : TAccountOracle,
       TAccountTokenProgram extends string
         ? ReadonlyAccount<TAccountTokenProgram>
         : TAccountTokenProgram,

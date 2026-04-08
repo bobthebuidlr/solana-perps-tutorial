@@ -30,6 +30,20 @@ export async function derivePositionPda(
 }
 
 /**
+ * Derives the protocol config PDA.
+ * @returns Derived config PDA address.
+ */
+export async function deriveConfigPda(): Promise<Address> {
+  const [pda] = await getProgramDerivedAddress({
+    programAddress: PERPS_PROGRAM_ADDRESS,
+    seeds: [
+      getBytesEncoder().encode(new Uint8Array([99, 111, 110, 102, 105, 103])), // "config"
+    ],
+  });
+  return pda;
+}
+
+/**
  * Derives the vault PDA.
  * @returns Derived vault PDA address.
  */
