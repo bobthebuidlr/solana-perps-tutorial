@@ -32,7 +32,10 @@ pub const ANCHOR_DISCRIMINATOR: usize = 8;
 pub const MAX_MARKETS: usize = 10;
 
 // Funding rate parameters
-pub const FUNDING_INTERVAL: i64 = 300; // 5 minutes in seconds
+// Rate is based on OI imbalance: rate = (long_oi - short_oi) / total_oi * MAX_FUNDING_RATE
+// At full imbalance (100% one side) the rate is 0.1% per hour.
+// Real protocols use much lower caps; this is aggressive for easy demonstration.
+pub const FUNDING_INTERVAL: i64 = 3600; // 1 hour in seconds
 pub const FUNDING_RATE_BASE: u64 = 1_000_000; // 1_000_000 = 100% for precision
 pub const MAX_FUNDING_RATE: u64 = 1_000; // 0.1% max per interval
 

@@ -203,7 +203,7 @@ function PositionRow({
   market: PerpsMarket | undefined;
   currentPrice: bigint | null;
 }) {
-  const { closePosition, isLoading: isClosing } = useClosePosition();
+  const { closePosition, isLoading: isClosing, error: closeError } = useClosePosition();
   const isLong = position.direction === PositionDirection.Long;
 
   // Client-side price PnL — same formula as on-chain calculate_price_pnl
@@ -318,13 +318,20 @@ function PositionRow({
 
       {/* Close position */}
       <td className="py-3.5 pl-4 pr-6 text-right">
-        <button
-          onClick={() => closePosition(position.perpsMarket as Address)}
-          disabled={isClosing}
-          className="rounded-lg border border-border-low bg-surface px-3 py-1.5 text-xs font-medium text-muted transition hover:text-foreground hover:border-border-strong hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isClosing ? "Closing…" : "Close"}
-        </button>
+        <div className="flex flex-col items-end gap-1.5">
+          <button
+            onClick={() => closePosition(position.perpsMarket as Address)}
+            disabled={isClosing}
+            className="rounded-lg border border-border-low bg-surface px-3 py-1.5 text-xs font-medium text-muted transition hover:text-foreground hover:border-border-strong hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isClosing ? "Closing\u2026" : "Close"}
+          </button>
+          {closeError && (
+            <p className="max-w-[240px] text-xs leading-tight text-short" title={closeError.message}>
+              {closeError.message}
+            </p>
+          )}
+        </div>
       </td>
     </tr>
   );

@@ -2,19 +2,15 @@
 
 import { type Address } from "@solana/kit";
 import { useWalletConnection } from "@solana/react-hooks";
-import { useMemo, useState } from "react";
-import { type Position } from "../generated/perps/accounts/position";
-import { PositionDirection } from "../generated/perps/types/positionDirection";
-import { useCollateral } from "../hooks/useCollateral";
-import { useMarkets } from "../hooks/useMarkets";
-import { useOraclePrices } from "../hooks/useOraclePrices";
-import { usePositions } from "../hooks/usePositions";
+import { useState } from "react";
+import { useAccountHealth } from "../hooks/useAccountHealth";
 import { useDeposit } from "../hooks/useDeposit";
 import { useWithdraw } from "../hooks/useWithdraw";
 import { useTokenAccount } from "../hooks/useTokenAccount";
 import { useTokenBalance } from "../hooks/useTokenBalance";
+import { usePositions } from "../hooks/usePositions";
 import { formatUsdc } from "../lib/format";
-import { USDC_DECIMALS, TOKEN_DECIMALS, USDC_MINT_ADDRESS } from "../lib/constants";
+import { USDC_DECIMALS, USDC_MINT_ADDRESS } from "../lib/constants";
 
 
 /**
@@ -25,67 +21,30 @@ export function AccountOverview() {
   const { wallet } = useWalletConnection();
   const walletAddress = wallet?.account.address;
 
-  const { balance, isLoading: collateralLoading } = useCollateral();
-  const { positions, isLoading: positionsLoading } = usePositions();
-  const { markets } = useMarkets();
-  const { prices: oraclePrices } = useOraclePrices();
+  const {
+    totalUnrealizedPnl,
+    totalMaintenanceMargin,
+    portfolioValue,
+    availableCollateral,
+    healthFactor,
+    accountLeverage,
+    collateralBalance,
+    isLoading: healthLoading,
+  } = useAccountHealth();
+  const { positions } = usePositions();
 
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
 
-  const collateralBalance = balance ?? 0n;
-
-  // Client-side PnL, notional, and maintenance margin calculation across all positions
-  const { totalUnrealizedPnl, totalNotional, totalMaintenanceMargin } = useMemo(() => {
-    let pnl = 0n;
-    let notional = 0n;
-    let maintenance = 0n;
-    for (const position of positions) {
-      const price = oraclePrices?.find(
-        (p) => p.tokenMint.toString() === position.perpsMarket.toString()
-      )?.price;
-      const market = markets?.find(
-        (m) => m.tokenMint.toString() === position.perpsMarket.toString()
-      );
-      if (!price) continue;
-
-      // Notional at current price
-      const posNotional = position.positionSize * price / BigInt(10 ** TOKEN_DECIMALS);
-      notional += posNotional;
-
-      // Maintenance margin: notional * maintenance_margin_ratio / 1_000_000
-      if (market) {
-        maintenance += posNotional * market.maintenanceMarginRatio / BigInt(1_000_000);
-      }
-
-      // Price PnL
-      const isLong = position.direction === PositionDirection.Long;
-      const pricePnl = isLong
-        ? (position.positionSize * price - position.positionSize * position.entryPrice) / BigInt(10 ** TOKEN_DECIMALS)
-        : (position.positionSize * position.entryPrice - position.positionSize * price) / BigInt(10 ** TOKEN_DECIMALS);
-
-      // Funding PnL
-      let fundingPnl = 0n;
-      if (market) {
-        const currentIndex = isLong ? market.cumulativeFundingLong : market.cumulativeFundingShort;
-        const indexDiff = currentIndex - position.entryFundingIndex;
-        const payment = indexDiff * position.collateral / BigInt(1_000_000);
-        fundingPnl = isLong ? -payment : payment;
-      }
-
-      pnl += pricePnl + fundingPnl;
-    }
-    return { totalUnrealizedPnl: pnl, totalNotional: notional, totalMaintenanceMargin: maintenance };
-  }, [positions, oraclePrices, markets]);
-
-  // Portfolio value = collateral balance + unrealized PnL
-  const portfolioValue = collateralBalance + (totalUnrealizedPnl >= 0n ? totalUnrealizedPnl : 0n)
-    - (totalUnrealizedPnl < 0n ? -totalUnrealizedPnl : 0n);
-
-  // Account leverage = total notional / portfolio value
-  const accountLeverage = portfolioValue > 0n
-    ? Number(totalNotional) / Number(portfolioValue)
-    : 0;
+  // Health factor color: green >= 2, yellow 1.2-2, red < 1.2
+  const healthColor =
+    healthFactor === null
+      ? ""
+      : healthFactor >= 2
+        ? "text-long"
+        : healthFactor >= 1.2
+          ? "text-yellow-400"
+          : "text-short";
 
   if (!walletAddress) {
     return (
@@ -100,7 +59,7 @@ export function AccountOverview() {
     );
   }
 
-  const isLoading = collateralLoading || positionsLoading;
+  const isLoading = healthLoading;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border-low bg-card shadow-[0_2px_8px_-2px_rgba(0,0,0,0.4)]">
@@ -184,6 +143,19 @@ export function AccountOverview() {
               )}
             </span>
           </div>
+
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted">Health Factor</span>
+            <span className={`font-mono text-sm font-semibold tabular-nums ${healthColor}`}>
+              {isLoading ? (
+                <span className="inline-block h-4 w-20 animate-pulse rounded bg-surface" />
+              ) : healthFactor === null ? (
+                "\u2014"
+              ) : (
+                healthFactor.toFixed(2)
+              )}
+            </span>
+          </div>
         </div>
       </div>
       
@@ -204,7 +176,7 @@ export function AccountOverview() {
           onSuccess={() => {
             setWithdrawOpen(false);
           }}
-          maxAmount={collateralBalance}
+          maxAmount={availableCollateral}
         />
       )}
     </div>

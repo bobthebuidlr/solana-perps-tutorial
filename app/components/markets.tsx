@@ -4,6 +4,7 @@ import { useWalletConnection } from "@solana/react-hooks";
 import { useEffect, useState } from "react";
 import { type PerpsMarket } from "../generated/perps";
 import { PositionDirection } from "../generated/perps/types/positionDirection";
+import { useAccountHealth } from "../hooks/useAccountHealth";
 import { useCollateral } from "../hooks/useCollateral";
 import { useMarkets } from "../hooks/useMarkets";
 import { useClosePosition } from "../hooks/useClosePosition";
@@ -334,6 +335,7 @@ function MarketRow({
 export function OrderForm({ market }: { market: PerpsMarket | null }) {
   const { wallet } = useWalletConnection();
   const { balance, isLoading: collateralLoading } = useCollateral();
+  const { availableCollateral } = useAccountHealth();
   const {
     openPosition,
     isLoading: isOpening,
@@ -358,6 +360,11 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
   );
   const isSubmitting = isOpening || isUpdating || isClosing;
 
+  // Whether the new order opposes the existing position direction
+  const isOppositeDirection = existingPosition
+    ? (direction === PositionDirection.Long) !== (existingPosition.direction === PositionDirection.Long)
+    : false;
+
   // Look up oracle price for the selected market
   const oraclePrice =
     oraclePrices?.find(
@@ -367,11 +374,16 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
   // Fixed leverage from market config (6-decimal, e.g. 10_000_000 = 10x)
   const leverage = market ? Number(market.maxLeverage) / 1_000_000 : 1;
 
-  // Max token quantity: (available_collateral * leverage) / oracle_price
-  const maxQtyBase =
-    oraclePrice && oraclePrice > 0n && collateralBalance > 0n
-      ? (collateralBalance * BigInt(leverage) * BigInt(10 ** TOKEN_DECIMALS)) / oraclePrice
+  // Max token quantity: (free_collateral * leverage) / oracle_price
+  // When trading opposite to an existing position, the existing size can be
+  // canceled for free, so add it on top of what available collateral supports.
+  const baseMaxQty =
+    oraclePrice && oraclePrice > 0n && availableCollateral > 0n
+      ? (availableCollateral * BigInt(leverage) * BigInt(10 ** TOKEN_DECIMALS)) / oraclePrice
       : 0n;
+  const maxQtyBase = isOppositeDirection
+    ? existingPosition!.positionSize + baseMaxQty
+    : baseMaxQty;
   const maxQtyDisplay = Number(maxQtyBase) / 10 ** TOKEN_DECIMALS;
 
   // Reset form whenever the selected market changes
@@ -457,12 +469,24 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
       : 0n;
 
   // Collateral cost (margin): notional / leverage
-  const collateralCost = leverage > 0 ? notionalValue / BigInt(leverage) : 0n;
+  // When opposing an existing position, netting reduces the effective cost.
+  const grossCollateralCost = leverage > 0 ? notionalValue / BigInt(leverage) : 0n;
+  const effectiveCollateralCost = (() => {
+    if (!isOppositeDirection || !oraclePrice) return grossCollateralCost;
+    if (parsedQtyBase <= existingPosition!.positionSize) {
+      // Reducing or closing: no additional collateral needed
+      return 0n;
+    }
+    // Flipping: only the net size requires new collateral
+    const netSize = parsedQtyBase - existingPosition!.positionSize;
+    const netNotional = (netSize * oraclePrice) / BigInt(10 ** TOKEN_DECIMALS);
+    return leverage > 0 ? netNotional / BigInt(leverage) : 0n;
+  })();
 
   const sizeValid =
     parsedQty > 0 &&
     oraclePrice !== null &&
-    collateralCost <= collateralBalance;
+    effectiveCollateralCost <= availableCollateral;
 
   // No collateral deposited yet
   if (!hasCollateral) {
@@ -572,7 +596,7 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
           </div>
           {parsedQty > 0 &&
             oraclePrice !== null &&
-            collateralCost > collateralBalance && (
+            effectiveCollateralCost > availableCollateral && (
               <p className="text-xs text-short">
                 Exceeds available collateral
               </p>

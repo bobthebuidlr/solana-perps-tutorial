@@ -156,7 +156,7 @@ pub fn update_funding_indices(
             return Ok(());
         }
 
-        // Calculate number of intervals (5-minute periods)
+        // Calculate number of intervals (hourly periods)
         let intervals = time_elapsed
             .checked_div(FUNDING_INTERVAL)
             .ok_or(ErrorCode::ArithmeticOverflow)?;
@@ -218,7 +218,7 @@ pub fn calculate_current_funding_indices(
         ));
     }
 
-    // Calculate number of intervals (5-minute periods)
+    // Calculate number of intervals (hourly periods)
     let intervals = time_elapsed
         .checked_div(FUNDING_INTERVAL)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
@@ -283,29 +283,26 @@ pub fn calculate_funding_pnl(
         .checked_sub(position.entry_funding_index)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
 
-    // Calculate funding PnL using USDC collateral as the notional value.
-    // position.collateral holds the USDC amount locked for this position, giving
-    // funding payments in USDC base units consistent with price PnL.
-    let funding_pnl = match position.direction {
-        PositionDirection::Long => {
-            // Longs pay when index increases (negative PnL)
-            let payment = index_diff
-                .checked_mul(position.collateral as i128)
-                .ok_or(ErrorCode::ArithmeticOverflow)?
-                .checked_div(FUNDING_RATE_BASE as i128)
-                .ok_or(ErrorCode::ArithmeticOverflow)?;
-            -(payment as i64)
-        }
-        PositionDirection::Short => {
-            // Shorts receive when longs pay (positive PnL when index decreases)
-            let payment = index_diff
-                .checked_mul(position.collateral as i128)
-                .ok_or(ErrorCode::ArithmeticOverflow)?
-                .checked_div(FUNDING_RATE_BASE as i128)
-                .ok_or(ErrorCode::ArithmeticOverflow)?;
-            payment as i64
-        }
-    };
+    // Calculate entry notional: position_size * entry_price / 10^6 (USDC 6-decimal).
+    // Using entry notional (not collateral) ensures funding scales with leverage —
+    // a 10x leveraged position pays 10x more funding than a 1x position with the same margin.
+    let entry_notional = (position.position_size as i128)
+        .checked_mul(position.entry_price as i128)
+        .ok_or(ErrorCode::ArithmeticOverflow)?
+        .checked_div(1_000_000i128)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+    // Funding PnL = -(index_diff * notional / BASE)
+    // The two cumulative indices move in opposite directions (long += delta, short -= delta),
+    // so the same negation formula works for both sides:
+    //   Long-heavy (rate>0): long index ↑ → long pays, short index ↓ → short receives
+    //   Short-heavy (rate<0): long index ↓ → long receives, short index ↑ → short pays
+    let payment = index_diff
+        .checked_mul(entry_notional)
+        .ok_or(ErrorCode::ArithmeticOverflow)?
+        .checked_div(FUNDING_RATE_BASE as i128)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+    let funding_pnl = -(payment as i64);
 
     Ok(funding_pnl)
 }

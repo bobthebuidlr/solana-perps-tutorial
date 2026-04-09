@@ -65,14 +65,14 @@ export function formatOi(val: bigint): string {
 }
 
 /**
- * Calculates the current funding rate from OI imbalance (mirrors on-chain logic).
+ * Calculates the current hourly funding rate from OI imbalance (mirrors on-chain logic).
  * @param totalLongOi - Total long open interest (raw u64).
  * @param totalShortOi - Total short open interest (raw u64).
- * @returns Funding rate as a percentage string, e.g. "+0.05%" or "-0.03%".
+ * @returns Funding rate as a per-hour percentage string, e.g. "+0.05%/hr" or "-0.03%/hr".
  */
 export function formatFundingRate(totalLongOi: bigint, totalShortOi: bigint): string {
   const total = totalLongOi + totalShortOi;
-  if (total === 0n) return "0.00%";
+  if (total === 0n) return "0.00%/hr";
   const imbalance = totalLongOi > totalShortOi
     ? totalLongOi - totalShortOi
     : totalShortOi - totalLongOi;
@@ -81,5 +81,5 @@ export function formatFundingRate(totalLongOi: bigint, totalShortOi: bigint): st
   const rate = (imbalance * MAX_FUNDING_RATE) / total;
   const pct = Number(rate) / Number(FUNDING_RATE_BASE) * 100;
   const sign = totalLongOi >= totalShortOi ? "+" : "-";
-  return `${sign}${pct.toFixed(4)}%`;
+  return `${sign}${pct.toFixed(4)}%/hr`;
 }
