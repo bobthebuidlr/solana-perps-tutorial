@@ -37,4 +37,10 @@ pub enum ErrorCode {
 
     #[msg("Trade exceeds the market's initial margin limit (max leverage)")]
     InitialMarginExceeded,
+
+    #[msg("Account is still above maintenance margin and cannot be liquidated")]
+    AccountNotLiquidatable,
+
+    #[msg("Target account has no open positions to liquidate")]
+    NoPositionsToLiquidate,
 }

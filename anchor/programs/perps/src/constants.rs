@@ -35,3 +35,7 @@ pub const MAX_FUNDING_RATE: u64 = 1_000; // 0.1% max per interval
 
 // Leverage and margin parameters
 pub const MARGIN_PRECISION: u64 = 1_000_000; // 6-decimal (1_000_000 = 100%)
+
+// Liquidation bonus paid to the liquidator, expressed in MARGIN_PRECISION units.
+// 10_000 / 1_000_000 = 1% of liquidated notional.
+pub const LIQUIDATION_FEE_RATIO: u64 = 10_000;

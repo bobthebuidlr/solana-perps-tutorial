@@ -81,4 +81,8 @@ pub mod perps {
     pub fn close_position(ctx: Context<ClosePosition>, token_mint: Pubkey) -> Result<()> {
         close_position::handler(ctx, token_mint)
     }
+
+    pub fn liquidate(ctx: Context<Liquidate>, liquidatee: Pubkey) -> Result<()> {
+        liquidate::handler(ctx, liquidatee)
+    }
 }

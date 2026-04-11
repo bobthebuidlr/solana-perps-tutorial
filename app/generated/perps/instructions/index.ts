@@ -10,6 +10,7 @@ export * from "./closePosition";
 export * from "./depositCollateral";
 export * from "./initialize";
 export * from "./initializeMarketWithOracle";
+export * from "./liquidate";
 export * from "./openPosition";
 export * from "./updateFunding";
 export * from "./updateOracle";

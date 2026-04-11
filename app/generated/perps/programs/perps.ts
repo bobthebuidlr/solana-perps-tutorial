@@ -21,6 +21,7 @@ import {
   parseDepositCollateralInstruction,
   parseInitializeInstruction,
   parseInitializeMarketWithOracleInstruction,
+  parseLiquidateInstruction,
   parseOpenPositionInstruction,
   parseUpdateFundingInstruction,
   parseUpdateOracleInstruction,
@@ -30,6 +31,7 @@ import {
   type ParsedDepositCollateralInstruction,
   type ParsedInitializeInstruction,
   type ParsedInitializeMarketWithOracleInstruction,
+  type ParsedLiquidateInstruction,
   type ParsedOpenPositionInstruction,
   type ParsedUpdateFundingInstruction,
   type ParsedUpdateOracleInstruction,
@@ -105,6 +107,7 @@ export enum PerpsInstruction {
   DepositCollateral,
   Initialize,
   InitializeMarketWithOracle,
+  Liquidate,
   OpenPosition,
   UpdateFunding,
   UpdateOracle,
@@ -159,6 +162,17 @@ export function identifyPerpsInstruction(
     )
   ) {
     return PerpsInstruction.InitializeMarketWithOracle;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([223, 179, 226, 125, 48, 46, 39, 74]),
+      ),
+      0,
+    )
+  ) {
+    return PerpsInstruction.Liquidate;
   }
   if (
     containsBytes(
@@ -236,6 +250,9 @@ export type ParsedPerpsInstruction<
       instructionType: PerpsInstruction.InitializeMarketWithOracle;
     } & ParsedInitializeMarketWithOracleInstruction<TProgram>)
   | ({
+      instructionType: PerpsInstruction.Liquidate;
+    } & ParsedLiquidateInstruction<TProgram>)
+  | ({
       instructionType: PerpsInstruction.OpenPosition;
     } & ParsedOpenPositionInstruction<TProgram>)
   | ({
@@ -282,6 +299,13 @@ export function parsePerpsInstruction<TProgram extends string>(
       return {
         instructionType: PerpsInstruction.InitializeMarketWithOracle,
         ...parseInitializeMarketWithOracleInstruction(instruction),
+      };
+    }
+    case PerpsInstruction.Liquidate: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: PerpsInstruction.Liquidate,
+        ...parseLiquidateInstruction(instruction),
       };
     }
     case PerpsInstruction.OpenPosition: {

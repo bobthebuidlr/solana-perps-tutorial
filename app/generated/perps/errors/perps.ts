@@ -38,8 +38,13 @@ export const PERPS_ERROR__MARKET_ALREADY_HAS_POSITION = 0x1779; // 6009
 export const PERPS_ERROR__MAX_POSITIONS_REACHED = 0x177a; // 6010
 /** InitialMarginExceeded: Trade exceeds the market's initial margin limit (max leverage) */
 export const PERPS_ERROR__INITIAL_MARGIN_EXCEEDED = 0x177b; // 6011
+/** AccountNotLiquidatable: Account is still above maintenance margin and cannot be liquidated */
+export const PERPS_ERROR__ACCOUNT_NOT_LIQUIDATABLE = 0x177c; // 6012
+/** NoPositionsToLiquidate: Target account has no open positions to liquidate */
+export const PERPS_ERROR__NO_POSITIONS_TO_LIQUIDATE = 0x177d; // 6013
 
 export type PerpsError =
+  | typeof PERPS_ERROR__ACCOUNT_NOT_LIQUIDATABLE
   | typeof PERPS_ERROR__ARITHMETIC_OVERFLOW
   | typeof PERPS_ERROR__BELOW_MAINTENANCE_MARGIN
   | typeof PERPS_ERROR__INITIAL_MARGIN_EXCEEDED
@@ -49,6 +54,7 @@ export type PerpsError =
   | typeof PERPS_ERROR__MARKET_ALREADY_HAS_POSITION
   | typeof PERPS_ERROR__MARKET_NOT_FOUND
   | typeof PERPS_ERROR__MAX_POSITIONS_REACHED
+  | typeof PERPS_ERROR__NO_POSITIONS_TO_LIQUIDATE
   | typeof PERPS_ERROR__ORACLE_PRICE_NOT_FOUND
   | typeof PERPS_ERROR__POSITION_NOT_FOUND
   | typeof PERPS_ERROR__UNAUTHORIZED_ACCESS;
@@ -56,6 +62,7 @@ export type PerpsError =
 let perpsErrorMessages: Record<PerpsError, string> | undefined;
 if (process.env.NODE_ENV !== "production") {
   perpsErrorMessages = {
+    [PERPS_ERROR__ACCOUNT_NOT_LIQUIDATABLE]: `Account is still above maintenance margin and cannot be liquidated`,
     [PERPS_ERROR__ARITHMETIC_OVERFLOW]: `Arithmetic overflow`,
     [PERPS_ERROR__BELOW_MAINTENANCE_MARGIN]: `Operation would put account below maintenance margin`,
     [PERPS_ERROR__INITIAL_MARGIN_EXCEEDED]: `Trade exceeds the market's initial margin limit (max leverage)`,
@@ -65,6 +72,7 @@ if (process.env.NODE_ENV !== "production") {
     [PERPS_ERROR__MARKET_ALREADY_HAS_POSITION]: `User already has an open position on this market`,
     [PERPS_ERROR__MARKET_NOT_FOUND]: `Market not found`,
     [PERPS_ERROR__MAX_POSITIONS_REACHED]: `User has reached the maximum number of open positions`,
+    [PERPS_ERROR__NO_POSITIONS_TO_LIQUIDATE]: `Target account has no open positions to liquidate`,
     [PERPS_ERROR__ORACLE_PRICE_NOT_FOUND]: `Oracle price not found`,
     [PERPS_ERROR__POSITION_NOT_FOUND]: `No open position found for this market`,
     [PERPS_ERROR__UNAUTHORIZED_ACCESS]: `Unauthorized: you do not have permission for this action`,

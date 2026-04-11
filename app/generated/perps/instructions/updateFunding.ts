@@ -12,6 +12,7 @@ import {
   fixEncoderSize,
   getBytesDecoder,
   getBytesEncoder,
+  getProgramDerivedAddress,
   getStructDecoder,
   getStructEncoder,
   transformEncoder,
@@ -81,6 +82,49 @@ export function getUpdateFundingInstructionDataCodec(): FixedSizeCodec<
     getUpdateFundingInstructionDataEncoder(),
     getUpdateFundingInstructionDataDecoder(),
   );
+}
+
+export type UpdateFundingAsyncInput<TAccountMarkets extends string = string> = {
+  markets?: Address<TAccountMarkets>;
+};
+
+export async function getUpdateFundingInstructionAsync<
+  TAccountMarkets extends string,
+  TProgramAddress extends Address = typeof PERPS_PROGRAM_ADDRESS,
+>(
+  input: UpdateFundingAsyncInput<TAccountMarkets>,
+  config?: { programAddress?: TProgramAddress },
+): Promise<UpdateFundingInstruction<TProgramAddress, TAccountMarkets>> {
+  // Program address.
+  const programAddress = config?.programAddress ?? PERPS_PROGRAM_ADDRESS;
+
+  // Original accounts.
+  const originalAccounts = {
+    markets: { value: input.markets ?? null, isWritable: true },
+  };
+  const accounts = originalAccounts as Record<
+    keyof typeof originalAccounts,
+    ResolvedAccount
+  >;
+
+  // Resolve default values.
+  if (!accounts.markets.value) {
+    accounts.markets.value = await getProgramDerivedAddress({
+      programAddress,
+      seeds: [
+        getBytesEncoder().encode(
+          new Uint8Array([109, 97, 114, 107, 101, 116, 115]),
+        ),
+      ],
+    });
+  }
+
+  const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
+  return Object.freeze({
+    accounts: [getAccountMeta(accounts.markets)],
+    data: getUpdateFundingInstructionDataEncoder().encode({}),
+    programAddress,
+  } as UpdateFundingInstruction<TProgramAddress, TAccountMarkets>);
 }
 
 export type UpdateFundingInput<TAccountMarkets extends string = string> = {
