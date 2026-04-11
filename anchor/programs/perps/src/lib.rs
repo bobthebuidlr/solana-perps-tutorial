@@ -42,6 +42,8 @@ pub mod perps {
         )
     }
 
+    /// Normally it would refer to a third party oracle, but for this demo
+    /// There is no security / checks on updating the oracle price.
     pub fn update_oracle(ctx: Context<UpdateOracle>, token: Pubkey, new_price: u64) -> Result<()> {
         update_oracle::handler(ctx, token, new_price)
     }

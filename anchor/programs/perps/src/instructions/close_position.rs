@@ -50,12 +50,6 @@ pub struct ClosePosition<'info> {
     pub token_program: Program<'info, Token>,
 }
 
-/// Closes the user's position on `token_mint`, settles PnL, adjusts market OI,
-/// and removes the position from the user's inline positions list.
-///
-/// @param ctx ClosePosition accounts context
-/// @param token_mint Market token mint
-/// @return Result<()>
 pub fn handler(ctx: Context<ClosePosition>, token_mint: Pubkey) -> Result<()> {
     let clock = Clock::get()?;
     let markets = &mut ctx.accounts.markets;
@@ -89,7 +83,7 @@ pub fn handler(ctx: Context<ClosePosition>, token_mint: Pubkey) -> Result<()> {
 
     let entry_notional = calculate_notional(position.position_size, position.entry_price)?;
 
-    // Settle PnL via token transfers
+    // Settle PnL
     let user_key = ctx.accounts.user.key();
     let collateral_bump = ctx.bumps.user_collateral_token_account;
     let collateral_seeds: &[&[u8]] = &[USER_COLLATERAL_SEED, user_key.as_ref(), &[collateral_bump]];
@@ -105,6 +99,7 @@ pub fn handler(ctx: Context<ClosePosition>, token_mint: Pubkey) -> Result<()> {
         &[vault_seeds],
     )?;
 
+    // Update the market OI
     remove_open_interest(perps_market, position.direction, entry_notional)?;
 
     // Drop the position from the inline list.

@@ -97,7 +97,6 @@ pub fn handler(
         entry_funding_index: new_funding_index,
     });
 
-    // Post-trade cross-margin health check. Atomically rolled back if it fails.
     check_user_account_health(
         &ctx.accounts.user_account,
         &ctx.accounts.markets,

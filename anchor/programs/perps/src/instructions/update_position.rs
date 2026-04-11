@@ -50,15 +50,6 @@ pub struct UpdatePosition<'info> {
     pub token_program: Program<'info, Token>,
 }
 
-/// Realizes current PnL on the user's position for `token_mint` and resets it
-/// with new parameters. The position lives inline in the user account, so
-/// cross-margin is read directly from `user_account.positions`.
-///
-/// @param ctx UpdatePosition accounts context
-/// @param token_mint Market token mint
-/// @param direction New direction (Long or Short)
-/// @param size New position size in base units
-/// @return Result<()>
 pub fn handler(
     ctx: Context<UpdatePosition>,
     token_mint: Pubkey,
@@ -73,8 +64,8 @@ pub fn handler(
 
     let oracle_price = get_oracle_price(&ctx.accounts.oracle, token_mint)?;
 
-    // --- Step 1: Look up the existing position and realize its PnL ---
-    let existing = ctx
+    // Realize the pnl of the existing position
+    let position_before = ctx
         .accounts
         .user_account
         .positions
@@ -89,8 +80,8 @@ pub fn handler(
         .find(|m| m.token_mint == token_mint)
         .ok_or(error!(ErrorCode::MarketNotFound))?;
 
-    let price_pnl = calculate_price_pnl(&existing, oracle_price)?;
-    let funding_pnl = calculate_funding_pnl(&existing, perps_market)?;
+    let price_pnl = calculate_price_pnl(&position_before, oracle_price)?;
+    let funding_pnl = calculate_funding_pnl(&position_before, perps_market)?;
     let total_pnl = price_pnl
         .checked_add(funding_pnl)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
@@ -110,27 +101,27 @@ pub fn handler(
         &[vault_seeds],
     )?;
 
-    // --- Step 2: Remove old OI ---
-    let old_entry_notional = calculate_notional(existing.position_size, existing.entry_price)?;
+    // Update the market OI
+    let old_entry_notional =
+        calculate_notional(position_before.position_size, position_before.entry_price)?;
     let perps_market = markets
         .perps
         .iter_mut()
         .find(|m| m.token_mint == token_mint)
         .ok_or(error!(ErrorCode::MarketNotFound))?;
 
-    remove_open_interest(perps_market, existing.direction, old_entry_notional)?;
+    remove_open_interest(perps_market, position_before.direction, old_entry_notional)?;
 
-    // --- Step 3: Compute new position values and add new OI ---
     let new_notional = calculate_notional(size, oracle_price)?;
 
     add_open_interest(perps_market, direction, new_notional)?;
 
+    // Update the position
     let new_funding_index = match direction {
         PositionDirection::Long => perps_market.cumulative_funding_long,
         PositionDirection::Short => perps_market.cumulative_funding_short,
     };
 
-    // --- Step 4: Write new position fields in place ---
     let position = ctx
         .accounts
         .user_account
@@ -143,8 +134,7 @@ pub fn handler(
     position.position_size = size;
     position.entry_funding_index = new_funding_index;
 
-    // --- Step 5: Post-trade cross-margin health check ---
-    // Atomically rolled back if it fails.
+    // Health check
     ctx.accounts.user_collateral_token_account.reload()?;
     let token_balance = ctx.accounts.user_collateral_token_account.amount;
 

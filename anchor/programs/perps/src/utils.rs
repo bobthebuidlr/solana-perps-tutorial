@@ -6,11 +6,6 @@ use crate::{
     UserAccount,
 };
 
-/// Looks up the spot/oracle price for a given token mint.
-///
-/// @param oracle Oracle account holding the price list
-/// @param token_mint Mint whose price should be fetched
-/// @return Result<u64> — 6-decimal price, or OraclePriceNotFound
 pub fn get_oracle_price(oracle: &Oracle, token_mint: Pubkey) -> Result<u64> {
     oracle
         .prices
@@ -20,7 +15,6 @@ pub fn get_oracle_price(oracle: &Oracle, token_mint: Pubkey) -> Result<u64> {
         .ok_or(error!(ErrorCode::OraclePriceNotFound))
 }
 
-/// Returns price-based PnL in USDC base units (6-decimal).
 pub fn calculate_price_pnl(position: &Position, current_price: u64) -> Result<i64> {
     let size = position.position_size as i128;
     let entry = position.entry_price as i128;
@@ -49,22 +43,10 @@ pub fn calculate_price_pnl(position: &Position, current_price: u64) -> Result<i6
     }
 }
 
-/// Computes notional value at a given price: position_size * price / 10^6.
 pub fn position_notional_at_price(position: &Position, price: u64) -> Result<u64> {
     calculate_notional(position.position_size, price)
 }
 
-/// Reverts if post-trade equity is below maintenance margin, or below the
-/// required initial margin (i.e. any market's `max_leverage` would be violated).
-/// Reads the authoritative position list directly from `user_account.positions`,
-/// so callers must have already mutated the positions vec to reflect the
-/// post-trade state before calling this.
-///
-/// @param user_account User account holding the full inline position list
-/// @param markets Markets account
-/// @param oracle Oracle account
-/// @param token_balance User's post-trade collateral token balance
-/// @return Result<()> — Err(BelowMaintenanceMargin) or Err(InitialMarginExceeded)
 pub fn check_user_account_health(
     user_account: &UserAccount,
     markets: &Markets,
@@ -81,18 +63,6 @@ pub fn check_user_account_health(
     Ok(())
 }
 
-/// Returns (total_equity, total_maintenance_margin, total_initial_margin) across
-/// all open positions. Initial margin per position is `notional / max_leverage`
-/// using that position's market config, so different markets can enforce
-/// different leverage caps inside the same cross-margin account.
-///
-/// @param positions Slice of the user's open positions
-/// @param markets Markets account
-/// @param oracle Oracle account
-/// @param token_balance User's collateral token balance
-/// @return Result<(i64, u64, u64)> — (equity, maintenance_margin, initial_margin);
-///   returns ArithmeticOverflow if any intermediate math or the final downcasts
-///   to i64/u64 would lose information.
 pub fn calculate_account_health(
     positions: &[Position],
     markets: &Markets,
@@ -331,18 +301,6 @@ pub fn remove_open_interest(
 }
 
 /// Settles PnL between user collateral and vault via token transfers.
-///
-/// In cross-margin, losses are bounded only by the user's actual collateral balance.
-/// The caller is responsible for running a post-trade health check to ensure the
-/// account remains solvent after settlement.
-///
-/// @param total_pnl Signed PnL in USDC base units (negative = loss, positive = profit)
-/// @param user_collateral User's collateral token account (PDA)
-/// @param vault Protocol LP vault token account
-/// @param token_program SPL Token program
-/// @param collateral_signer_seeds Seeds for signing from the user collateral PDA
-/// @param vault_signer_seeds Seeds for signing from the vault PDA
-/// @return Result<()>
 pub fn settle_pnl<'info>(
     total_pnl: i64,
     user_collateral: &Account<'info, TokenAccount>,
@@ -356,23 +314,20 @@ pub fn settle_pnl<'info>(
         // Cap loss only at available balance; the post-trade health check is
         // responsible for rejecting trades that would leave the account underwater.
         let abs_loss = total_pnl.unsigned_abs();
+
+        // If the liquidation was done in time, the user will have enough collateral to cover the loss.
         let loss_amount = abs_loss.min(user_collateral.amount);
 
-        if loss_amount > 0 {
-            let cpi_accounts = Transfer {
-                from: user_collateral.to_account_info(),
-                to: vault.to_account_info(),
-                authority: user_collateral.to_account_info(),
-            };
-            let cpi_ctx = CpiContext::new_with_signer(
-                token_program.key(),
-                cpi_accounts,
-                collateral_signer_seeds,
-            );
-            token::transfer(cpi_ctx, loss_amount)?;
-        }
+        let cpi_accounts = Transfer {
+            from: user_collateral.to_account_info(),
+            to: vault.to_account_info(),
+            authority: user_collateral.to_account_info(),
+        };
+        let cpi_ctx =
+            CpiContext::new_with_signer(token_program.key(), cpi_accounts, collateral_signer_seeds);
+        token::transfer(cpi_ctx, loss_amount)?;
 
-    // User has profits: Send money from the vault to user's collateral account
+        // User has profits: Send money from the vault to user's collateral account
     } else if total_pnl > 0 {
         let profit_amount = total_pnl as u64;
         require!(
