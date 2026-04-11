@@ -3,8 +3,8 @@ use anchor_spl::token::{Token, TokenAccount};
 
 use crate::{
     calculate_funding_pnl, calculate_notional, calculate_price_pnl, constants::*, error::ErrorCode,
-    remove_open_interest, settle_pnl, update_funding_indices, Markets, Oracle, ProtocolConfig,
-    UserAccount,
+    get_oracle_price, remove_open_interest, settle_pnl, update_funding_indices, Markets, Oracle,
+    ProtocolConfig, UserAccount,
 };
 
 #[derive(Accounts)]
@@ -69,14 +69,7 @@ pub fn handler(ctx: Context<ClosePosition>, token_mint: Pubkey) -> Result<()> {
         .find(|m| m.token_mint == token_mint)
         .ok_or(error!(ErrorCode::MarketNotFound))?;
 
-    let oracle_price = ctx
-        .accounts
-        .oracle
-        .prices
-        .iter()
-        .find(|p| p.token_mint == token_mint)
-        .ok_or(error!(ErrorCode::OraclePriceNotFound))?
-        .price;
+    let oracle_price = get_oracle_price(&ctx.accounts.oracle, token_mint)?;
 
     // Locate the position inline and snapshot it for PnL math.
     let idx = ctx
@@ -89,7 +82,7 @@ pub fn handler(ctx: Context<ClosePosition>, token_mint: Pubkey) -> Result<()> {
     let position = ctx.accounts.user_account.positions[idx].clone();
 
     let price_pnl = calculate_price_pnl(&position, oracle_price)?;
-    let funding_pnl = calculate_funding_pnl(&position, perps_market, None)?;
+    let funding_pnl = calculate_funding_pnl(&position, perps_market)?;
     let total_pnl = price_pnl
         .checked_add(funding_pnl)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
@@ -105,7 +98,6 @@ pub fn handler(ctx: Context<ClosePosition>, token_mint: Pubkey) -> Result<()> {
 
     settle_pnl(
         total_pnl,
-        position.collateral,
         &ctx.accounts.user_collateral_token_account,
         &ctx.accounts.vault,
         &ctx.accounts.token_program,

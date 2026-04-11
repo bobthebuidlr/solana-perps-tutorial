@@ -8,7 +8,6 @@ pub mod open_position;
 pub mod update_funding;
 pub mod update_oracle;
 pub mod update_position;
-pub mod view_position_pnl;
 pub mod withdraw_collateral;
 
 pub use close_position::*;
@@ -19,5 +18,4 @@ pub use open_position::*;
 pub use update_funding::*;
 pub use update_oracle::*;
 pub use update_position::*;
-pub use view_position_pnl::*;
 pub use withdraw_collateral::*;

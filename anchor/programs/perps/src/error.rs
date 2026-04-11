@@ -34,4 +34,7 @@ pub enum ErrorCode {
 
     #[msg("User has reached the maximum number of open positions")]
     MaxPositionsReached,
+
+    #[msg("Trade exceeds the market's initial margin limit (max leverage)")]
+    InitialMarginExceeded,
 }

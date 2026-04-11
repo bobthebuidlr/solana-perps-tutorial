@@ -34,5 +34,4 @@ pub const FUNDING_RATE_BASE: u64 = 1_000_000; // 1_000_000 = 100% for precision
 pub const MAX_FUNDING_RATE: u64 = 1_000; // 0.1% max per interval
 
 // Leverage and margin parameters
-pub const LEVERAGE_PRECISION: u64 = 1_000_000; // 6-decimal (1_000_000 = 1x)
 pub const MARGIN_PRECISION: u64 = 1_000_000; // 6-decimal (1_000_000 = 100%)

@@ -25,7 +25,6 @@ import {
   parseUpdateFundingInstruction,
   parseUpdateOracleInstruction,
   parseUpdatePositionInstruction,
-  parseViewPositionPnlInstruction,
   parseWithdrawCollateralInstruction,
   type ParsedClosePositionInstruction,
   type ParsedDepositCollateralInstruction,
@@ -35,7 +34,6 @@ import {
   type ParsedUpdateFundingInstruction,
   type ParsedUpdateOracleInstruction,
   type ParsedUpdatePositionInstruction,
-  type ParsedViewPositionPnlInstruction,
   type ParsedWithdrawCollateralInstruction,
 } from "../instructions";
 
@@ -111,7 +109,6 @@ export enum PerpsInstruction {
   UpdateFunding,
   UpdateOracle,
   UpdatePosition,
-  ViewPositionPnl,
   WithdrawCollateral,
 }
 
@@ -211,17 +208,6 @@ export function identifyPerpsInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([145, 87, 174, 186, 13, 68, 130, 111]),
-      ),
-      0,
-    )
-  ) {
-    return PerpsInstruction.ViewPositionPnl;
-  }
-  if (
-    containsBytes(
-      data,
-      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([115, 135, 168, 106, 139, 214, 138, 150]),
       ),
       0,
@@ -261,9 +247,6 @@ export type ParsedPerpsInstruction<
   | ({
       instructionType: PerpsInstruction.UpdatePosition;
     } & ParsedUpdatePositionInstruction<TProgram>)
-  | ({
-      instructionType: PerpsInstruction.ViewPositionPnl;
-    } & ParsedViewPositionPnlInstruction<TProgram>)
   | ({
       instructionType: PerpsInstruction.WithdrawCollateral;
     } & ParsedWithdrawCollateralInstruction<TProgram>);
@@ -327,13 +310,6 @@ export function parsePerpsInstruction<TProgram extends string>(
       return {
         instructionType: PerpsInstruction.UpdatePosition,
         ...parseUpdatePositionInstruction(instruction),
-      };
-    }
-    case PerpsInstruction.ViewPositionPnl: {
-      assertIsInstructionWithAccounts(instruction);
-      return {
-        instructionType: PerpsInstruction.ViewPositionPnl,
-        ...parseViewPositionPnlInstruction(instruction),
       };
     }
     case PerpsInstruction.WithdrawCollateral: {

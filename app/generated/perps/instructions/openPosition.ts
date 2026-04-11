@@ -95,14 +95,12 @@ export type OpenPositionInstructionData = {
   tokenMint: Address;
   direction: PositionDirection;
   amount: bigint;
-  leverage: bigint;
 };
 
 export type OpenPositionInstructionDataArgs = {
   tokenMint: Address;
   direction: PositionDirectionArgs;
   amount: number | bigint;
-  leverage: number | bigint;
 };
 
 export function getOpenPositionInstructionDataEncoder(): FixedSizeEncoder<OpenPositionInstructionDataArgs> {
@@ -112,7 +110,6 @@ export function getOpenPositionInstructionDataEncoder(): FixedSizeEncoder<OpenPo
       ["tokenMint", getAddressEncoder()],
       ["direction", getPositionDirectionEncoder()],
       ["amount", getU64Encoder()],
-      ["leverage", getU64Encoder()],
     ]),
     (value) => ({ ...value, discriminator: OPEN_POSITION_DISCRIMINATOR }),
   );
@@ -124,7 +121,6 @@ export function getOpenPositionInstructionDataDecoder(): FixedSizeDecoder<OpenPo
     ["tokenMint", getAddressDecoder()],
     ["direction", getPositionDirectionDecoder()],
     ["amount", getU64Decoder()],
-    ["leverage", getU64Decoder()],
   ]);
 }
 
@@ -153,7 +149,6 @@ export type OpenPositionAsyncInput<
   tokenMint: OpenPositionInstructionDataArgs["tokenMint"];
   direction: OpenPositionInstructionDataArgs["direction"];
   amount: OpenPositionInstructionDataArgs["amount"];
-  leverage: OpenPositionInstructionDataArgs["leverage"];
 };
 
 export async function getOpenPositionInstructionAsync<
@@ -267,7 +262,6 @@ export type OpenPositionInput<
   tokenMint: OpenPositionInstructionDataArgs["tokenMint"];
   direction: OpenPositionInstructionDataArgs["direction"];
   amount: OpenPositionInstructionDataArgs["amount"];
-  leverage: OpenPositionInstructionDataArgs["leverage"];
 };
 
 export function getOpenPositionInstruction<

@@ -6,6 +6,20 @@ use crate::{
     UserAccount,
 };
 
+/// Looks up the spot/oracle price for a given token mint.
+///
+/// @param oracle Oracle account holding the price list
+/// @param token_mint Mint whose price should be fetched
+/// @return Result<u64> — 6-decimal price, or OraclePriceNotFound
+pub fn get_oracle_price(oracle: &Oracle, token_mint: Pubkey) -> Result<u64> {
+    oracle
+        .prices
+        .iter()
+        .find(|p| p.token_mint == token_mint)
+        .map(|p| p.price)
+        .ok_or(error!(ErrorCode::OraclePriceNotFound))
+}
+
 /// Returns price-based PnL in USDC base units (6-decimal).
 pub fn calculate_price_pnl(position: &Position, current_price: u64) -> Result<i64> {
     let size = position.position_size as i128;
@@ -40,7 +54,8 @@ pub fn position_notional_at_price(position: &Position, price: u64) -> Result<u64
     calculate_notional(position.position_size, price)
 }
 
-/// Reverts if the user's post-trade equity is below maintenance margin.
+/// Reverts if post-trade equity is below maintenance margin, or below the
+/// required initial margin (i.e. any market's `max_leverage` would be violated).
 /// Reads the authoritative position list directly from `user_account.positions`,
 /// so callers must have already mutated the positions vec to reflect the
 /// post-trade state before calling this.
@@ -49,32 +64,44 @@ pub fn position_notional_at_price(position: &Position, price: u64) -> Result<u64
 /// @param markets Markets account
 /// @param oracle Oracle account
 /// @param token_balance User's post-trade collateral token balance
-/// @return Result<()> — Err(BelowMaintenanceMargin) if unhealthy
+/// @return Result<()> — Err(BelowMaintenanceMargin) or Err(InitialMarginExceeded)
 pub fn check_user_account_health(
     user_account: &UserAccount,
     markets: &Markets,
     oracle: &Oracle,
     token_balance: u64,
 ) -> Result<()> {
-    let (equity, maintenance) =
+    let (equity, maintenance, initial) =
         calculate_account_health(&user_account.positions, markets, oracle, token_balance)?;
     require!(
         equity >= maintenance as i64,
         ErrorCode::BelowMaintenanceMargin
     );
+    require!(equity >= initial as i64, ErrorCode::InitialMarginExceeded);
     Ok(())
 }
 
-/// Returns (total_equity, total_maintenance_margin) across all open positions.
-/// Account is healthy when equity >= maintenance_margin.
+/// Returns (total_equity, total_maintenance_margin, total_initial_margin) across
+/// all open positions. Initial margin per position is `notional / max_leverage`
+/// using that position's market config, so different markets can enforce
+/// different leverage caps inside the same cross-margin account.
+///
+/// @param positions Slice of the user's open positions
+/// @param markets Markets account
+/// @param oracle Oracle account
+/// @param token_balance User's collateral token balance
+/// @return Result<(i64, u64, u64)> — (equity, maintenance_margin, initial_margin);
+///   returns ArithmeticOverflow if any intermediate math or the final downcasts
+///   to i64/u64 would lose information.
 pub fn calculate_account_health(
     positions: &[Position],
     markets: &Markets,
     oracle: &Oracle,
     token_balance: u64,
-) -> Result<(i64, u64)> {
+) -> Result<(i64, u64, u64)> {
     let mut total_unrealized_pnl: i64 = 0;
     let mut total_maintenance_margin: u128 = 0;
+    let mut total_initial_margin: u128 = 0;
 
     for position in positions {
         let perps_market = markets
@@ -83,15 +110,10 @@ pub fn calculate_account_health(
             .find(|m| m.token_mint == position.perps_market)
             .ok_or(error!(ErrorCode::MarketNotFound))?;
 
-        let current_price = oracle
-            .prices
-            .iter()
-            .find(|p| p.token_mint == position.perps_market)
-            .ok_or(error!(ErrorCode::OraclePriceNotFound))?
-            .price;
+        let current_price = get_oracle_price(oracle, position.perps_market)?;
 
         let price_pnl = calculate_price_pnl(position, current_price)?;
-        let funding_pnl = calculate_funding_pnl(position, perps_market, None)?;
+        let funding_pnl = calculate_funding_pnl(position, perps_market)?;
         let position_pnl = price_pnl
             .checked_add(funding_pnl)
             .ok_or(ErrorCode::ArithmeticOverflow)?;
@@ -110,13 +132,40 @@ pub fn calculate_account_health(
         total_maintenance_margin = total_maintenance_margin
             .checked_add(maintenance)
             .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+        // Initial margin = notional / max_leverage. max_leverage is 6-decimal
+        // (10_000_000 = 10x), so multiplying by MARGIN_PRECISION yields a 10%
+        // requirement for a 10x cap.
+        let initial = notional
+            .checked_mul(MARGIN_PRECISION as u128)
+            .ok_or(ErrorCode::ArithmeticOverflow)?
+            .checked_div(perps_market.max_leverage as u128)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+        total_initial_margin = total_initial_margin
+            .checked_add(initial)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
     }
 
-    let total_equity = (token_balance as i64)
-        .checked_add(total_unrealized_pnl)
+    let total_equity_i128 = (token_balance as i128)
+        .checked_add(total_unrealized_pnl as i128)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
+    let total_equity: i64 = total_equity_i128
+        .try_into()
+        .map_err(|_| ErrorCode::ArithmeticOverflow)?;
 
-    Ok((total_equity, total_maintenance_margin as u64))
+    let total_maintenance_margin_u64: u64 = total_maintenance_margin
+        .try_into()
+        .map_err(|_| ErrorCode::ArithmeticOverflow)?;
+    let total_initial_margin_u64: u64 = total_initial_margin
+        .try_into()
+        .map_err(|_| ErrorCode::ArithmeticOverflow)?;
+
+    Ok((
+        total_equity,
+        total_maintenance_margin_u64,
+        total_initial_margin_u64,
+    ))
 }
 
 /// Calculates the funding rate based on OI imbalance.
@@ -190,75 +239,20 @@ pub fn update_funding_indices(
     Ok(())
 }
 
-/// Calculates what the current funding indices would be without mutating state.
-pub fn calculate_current_funding_indices(
-    perps_market: &PerpsMarket,
-    current_timestamp: i64,
-) -> Result<(i128, i128)> {
-    let time_elapsed = current_timestamp
-        .checked_sub(perps_market.last_funding_update)
-        .ok_or(ErrorCode::ArithmeticOverflow)?;
-
-    if time_elapsed <= 0 {
-        return Ok((
-            perps_market.cumulative_funding_long,
-            perps_market.cumulative_funding_short,
-        ));
-    }
-
-    let intervals = time_elapsed
-        .checked_div(FUNDING_INTERVAL)
-        .ok_or(ErrorCode::ArithmeticOverflow)?;
-
-    if intervals == 0 {
-        return Ok((
-            perps_market.cumulative_funding_long,
-            perps_market.cumulative_funding_short,
-        ));
-    }
-
-    let funding_rate =
-        calculate_funding_rate(perps_market.total_long_oi, perps_market.total_short_oi)?;
-
-    let funding_delta = (funding_rate as i128)
-        .checked_mul(intervals as i128)
-        .ok_or(ErrorCode::ArithmeticOverflow)?;
-
-    let new_long_index = perps_market
-        .cumulative_funding_long
-        .checked_add(funding_delta)
-        .ok_or(ErrorCode::ArithmeticOverflow)?;
-
-    let new_short_index = perps_market
-        .cumulative_funding_short
-        .checked_sub(funding_delta)
-        .ok_or(ErrorCode::ArithmeticOverflow)?;
-
-    Ok((new_long_index, new_short_index))
-}
-
 /// Calculates funding PnL using the cumulative index approach.
+///
+/// Reads directly from the market's persisted cumulative indices — callers that
+/// need up-to-date funding must call `update_funding_indices` first (as all
+/// state-changing instructions already do).
 ///
 /// The two cumulative indices move in opposite directions (long += delta, short -= delta),
 /// so the same negation formula works for both sides:
 ///   Long-heavy (rate>0): long index goes up -> long pays, short index goes down -> short receives
 ///   Short-heavy (rate<0): long index goes down -> long receives, short index goes up -> short pays
-pub fn calculate_funding_pnl(
-    position: &Position,
-    perps_market: &PerpsMarket,
-    current_timestamp: Option<i64>,
-) -> Result<i64> {
-    let current_index = if let Some(timestamp) = current_timestamp {
-        let (long_index, short_index) = calculate_current_funding_indices(perps_market, timestamp)?;
-        match position.direction {
-            PositionDirection::Long => long_index,
-            PositionDirection::Short => short_index,
-        }
-    } else {
-        match position.direction {
-            PositionDirection::Long => perps_market.cumulative_funding_long,
-            PositionDirection::Short => perps_market.cumulative_funding_short,
-        }
+pub fn calculate_funding_pnl(position: &Position, perps_market: &PerpsMarket) -> Result<i64> {
+    let current_index = match position.direction {
+        PositionDirection::Long => perps_market.cumulative_funding_long,
+        PositionDirection::Short => perps_market.cumulative_funding_short,
     };
 
     let index_diff = current_index
@@ -337,9 +331,20 @@ pub fn remove_open_interest(
 }
 
 /// Settles PnL between user collateral and vault via token transfers.
+///
+/// In cross-margin, losses are bounded only by the user's actual collateral balance.
+/// The caller is responsible for running a post-trade health check to ensure the
+/// account remains solvent after settlement.
+///
+/// @param total_pnl Signed PnL in USDC base units (negative = loss, positive = profit)
+/// @param user_collateral User's collateral token account (PDA)
+/// @param vault Protocol LP vault token account
+/// @param token_program SPL Token program
+/// @param collateral_signer_seeds Seeds for signing from the user collateral PDA
+/// @param vault_signer_seeds Seeds for signing from the vault PDA
+/// @return Result<()>
 pub fn settle_pnl<'info>(
     total_pnl: i64,
-    max_loss: u64,
     user_collateral: &Account<'info, TokenAccount>,
     vault: &Account<'info, TokenAccount>,
     token_program: &Program<'info, Token>,
@@ -348,9 +353,10 @@ pub fn settle_pnl<'info>(
 ) -> Result<()> {
     // User has losses: Transfer money from user's collateral account to the vault
     if total_pnl < 0 {
-        // Cap loss at position collateral and available balance
+        // Cap loss only at available balance; the post-trade health check is
+        // responsible for rejecting trades that would leave the account underwater.
         let abs_loss = total_pnl.unsigned_abs();
-        let loss_amount = abs_loss.min(max_loss).min(user_collateral.amount);
+        let loss_amount = abs_loss.min(user_collateral.amount);
 
         if loss_amount > 0 {
             let cpi_accounts = Transfer {

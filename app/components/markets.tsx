@@ -401,11 +401,10 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
       return;
 
     const orderQty = Math.floor(parseFloat(sizeInput) * 10 ** TOKEN_DECIMALS);
-    const leverageRaw = Number(market.maxLeverage);
     let sig: string | null = null;
 
     if (!existingPosition) {
-      sig = await openPosition(market.tokenMint, direction, orderQty, leverageRaw);
+      sig = await openPosition(market.tokenMint, direction, orderQty);
     } else {
       const currentSize = Number(existingPosition.positionSize);
       const sameDirection =
@@ -415,18 +414,18 @@ export function OrderForm({ market }: { market: PerpsMarket | null }) {
       if (sameDirection) {
         // Increase: 5 long + 3 long = 8 long
         const resultSize = currentSize + orderQty;
-        sig = await updatePosition(market.tokenMint, direction, resultSize, leverageRaw);
+        sig = await updatePosition(market.tokenMint, direction, resultSize);
       } else if (orderQty < currentSize) {
         // Reduce: 5 long + 1 short = 4 long
         const resultSize = currentSize - orderQty;
-        sig = await updatePosition(market.tokenMint, existingPosition.direction, resultSize, leverageRaw);
+        sig = await updatePosition(market.tokenMint, existingPosition.direction, resultSize);
       } else if (orderQty === currentSize) {
         // Close: 5 long + 5 short = flat
         sig = await closePosition(market.tokenMint);
       } else {
         // Flip: 5 long + 7 short = 2 short
         const resultSize = orderQty - currentSize;
-        sig = await updatePosition(market.tokenMint, direction, resultSize, leverageRaw);
+        sig = await updatePosition(market.tokenMint, direction, resultSize);
       }
     }
 

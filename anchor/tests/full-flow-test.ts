@@ -27,11 +27,9 @@ describe("Full Flow Test", () => {
   const INITIAL_PRICE = new BN(100_000_000); // $100 per SOL (6-decimal fixed point)
   const DEPOSIT_AMOUNT = new BN(1000_000_000); // 1000 USDC (6-decimal)
   // Position size is now token quantity in 6-decimal precision (5 SOL = 5_000_000)
-  // At $100/SOL with 5x leverage this costs $100 USDC collateral (notional $500 / 5)
+  // At $100/SOL this is $500 notional (5 SOL * $100)
   const POSITION_SIZE = new BN(5_000_000); // 5 SOL (6-decimal token qty)
-  const LEVERAGE_1X = new BN(1_000_000); // 1x leverage (6-decimal)
-  const LEVERAGE_5X = new BN(5_000_000); // 5x leverage (6-decimal)
-  const MAX_LEVERAGE = new BN(10_000_000); // 10x max leverage (6-decimal)
+  const MAX_LEVERAGE = new BN(10_000_000); // 10x max leverage (6-decimal, market config only)
   const MAINTENANCE_MARGIN_RATIO = new BN(50_000); // 5% maintenance margin (6-decimal)
 
   let usdcMint: PublicKey;
@@ -345,7 +343,7 @@ describe("Full Flow Test", () => {
         const direction = { long: {} };
 
         const tx = await program.methods
-          .openPosition(SOL_MINT, direction, POSITION_SIZE, LEVERAGE_5X)
+          .openPosition(SOL_MINT, direction, POSITION_SIZE)
           .accounts({
             user: wallet.publicKey,
             markets: marketsPda,
@@ -377,11 +375,6 @@ describe("Full Flow Test", () => {
         position!.positionSize.toNumber() / 1_000_000,
         "SOL (token quantity)"
       );
-      console.log(
-        "- Collateral:",
-        position!.collateral.toNumber() / 1_000_000,
-        "USDC"
-      );
       console.log("- Direction:", position!.direction.long ? "LONG" : "SHORT");
 
       console.log("✓ Position verified");
@@ -396,155 +389,25 @@ describe("Full Flow Test", () => {
     });
   });
 
-  describe("Step 5: View Position PnL", () => {
-    // Raw oracle prices: price_usd * 1_000_000 (6-decimal precision)
-    const PROFIT_PRICE = new BN(150_000_000); // $150 — 50% above $100 entry
-    const LOSS_PRICE = new BN(80_000_000); // $80 — 20% below $100 entry
-
-    it("should return positive price PnL for a LONG when oracle price increases", async () => {
-      console.log(
-        "\n🚀 Step 5a: PnL check — price increase (LONG in profit)..."
-      );
-
-      // Update oracle to the profit price
-      const updateTx = await program.methods
-        .updateOracle(SOL_MINT, PROFIT_PRICE)
-        .accounts({ oracle: oraclePda })
-        .rpc();
-      console.log("Oracle updated to $150. TX:", updateTx);
-
-      // Fetch on-chain position to get the actual entry price (oracle/spot price at open time)
-      const position = await fetchSolPosition();
-      assert.isDefined(position, "Position should exist");
-      console.log(
-        "Entry price:",
-        position!.entryPrice.toNumber() / 1_000_000,
-        "USD"
-      );
-
-      // Simulate the view instruction and receive the returned PositionInfo
-      const positionInfo = await program.methods
-        .viewPositionPnl(SOL_MINT)
-        .accounts({
-          markets: marketsPda,
-          userAccount: userAccountPda,
-          oracle: oraclePda,
-        })
-        .view();
-
-      console.log("\nPosition Info:");
-      console.log(
-        "- Direction:",
-        positionInfo.direction.long ? "LONG" : "SHORT"
-      );
-      console.log(
-        "- Entry price:",
-        positionInfo.entryPrice.toNumber() / 1_000_000,
-        "USD"
-      );
-      console.log("- Price PnL (raw):", positionInfo.pnlInfo.price.toString());
-      console.log(
-        "- Funding PnL (raw):",
-        positionInfo.pnlInfo.funding.toString()
-      );
-      console.log("- Total PnL (raw):", positionInfo.pnlInfo.total.toString());
-
-      // Expected price PnL = position_size * (current_price − entry_price) / 10^6
-      const expectedPricePnl = POSITION_SIZE.mul(
-        PROFIT_PRICE.sub(position!.entryPrice)
-      ).div(new BN(1_000_000));
-      console.log("Expected price PnL (raw):", expectedPricePnl.toString());
-
-      assert.isDefined(positionInfo.direction.long, "Direction should be LONG");
-      assert.equal(
-        positionInfo.pnlInfo.price.toString(),
-        expectedPricePnl.toString(),
-        "Price PnL should equal size * (currentPrice - entryPrice) / 10^6"
-      );
-      assert.isTrue(
-        positionInfo.pnlInfo.price.gt(new BN(0)),
-        "Price PnL should be positive when oracle price exceeds entry price"
-      );
-      assert.equal(
-        positionInfo.pnlInfo.total.toString(),
-        positionInfo.pnlInfo.price.add(positionInfo.pnlInfo.funding).toString(),
-        "Total PnL should be the sum of price PnL and funding PnL"
-      );
-      console.log("✓ LONG position shows positive PnL on price increase");
-    });
-
-    it("should return negative price PnL for a LONG when oracle price decreases", async () => {
-      console.log(
-        "\n🚀 Step 5b: PnL check — price decrease (LONG at a loss)..."
-      );
-
-      // Update oracle to the loss price
-      const updateTx = await program.methods
-        .updateOracle(SOL_MINT, LOSS_PRICE)
-        .accounts({ oracle: oraclePda })
-        .rpc();
-      console.log("Oracle updated to $80. TX:", updateTx);
-
-      // Fetch on-chain position to get the actual entry price
-      const position = await fetchSolPosition();
-      assert.isDefined(position, "Position should exist");
-      console.log(
-        "Entry price:",
-        position!.entryPrice.toNumber() / 1_000_000,
-        "USD"
-      );
-
-      // Simulate the view instruction and receive the returned PositionInfo
-      const positionInfo = await program.methods
-        .viewPositionPnl(SOL_MINT)
-        .accounts({
-          markets: marketsPda,
-          userAccount: userAccountPda,
-          oracle: oraclePda,
-        })
-        .view();
-
-      console.log("\nPosition Info:");
-      console.log("- Price PnL (raw):", positionInfo.pnlInfo.price.toString());
-      console.log(
-        "- Funding PnL (raw):",
-        positionInfo.pnlInfo.funding.toString()
-      );
-      console.log("- Total PnL (raw):", positionInfo.pnlInfo.total.toString());
-
-      const expectedPricePnl = POSITION_SIZE.mul(
-        LOSS_PRICE.sub(position!.entryPrice)
-      ).div(new BN(1_000_000));
-      console.log("Expected price PnL (raw):", expectedPricePnl.toString());
-
-      assert.equal(
-        positionInfo.pnlInfo.price.toString(),
-        expectedPricePnl.toString(),
-        "Price PnL should equal size * (currentPrice - entryPrice) / 10^6"
-      );
-      assert.isTrue(
-        positionInfo.pnlInfo.price.isNeg(),
-        "Price PnL should be negative when oracle price is below entry price"
-      );
-      assert.equal(
-        positionInfo.pnlInfo.total.toString(),
-        positionInfo.pnlInfo.price.add(positionInfo.pnlInfo.funding).toString(),
-        "Total PnL should be the sum of price PnL and funding PnL"
-      );
-      console.log("✓ LONG position shows negative PnL on price decrease");
-    });
-  });
-
   describe("Step 6: Close Position", () => {
-    // Oracle is at $80 after Step 5b — no update needed for the loss case
+    // Close Step 6a uses an $80 price to verify loss-realization math.
+    // PnL correctness itself is covered by the Rust unit tests in
+    // funding_tests.rs (price + funding components) and verified end-to-end
+    // here via the actual token transfers in close/update.
+    const LOSS_PRICE = new BN(80_000_000); // $80 — 20% below $100 entry
     const CLOSE_PRICE_WIN = new BN(110_000_000); // $110 (6-decimal fixed point)
     // 1 SOL in 6-decimal token quantity
     const POSITION_SIZE_SMALL = new BN(1_000_000);
 
     it("Step 6a: should close the 5-SOL LONG at a loss ($80) and transfer loss to vault", async () => {
-      console.log(
-        "\n🚀 Step 6a: Closing 5-SOL LONG at $80 (loss case, oracle already set)..."
-      );
+      console.log("\n🚀 Step 6a: Closing 5-SOL LONG at $80 (loss case)...");
+
+      // Drive oracle to $80 to create an unrealized loss on the 5-SOL LONG.
+      await program.methods
+        .updateOracle(SOL_MINT, LOSS_PRICE)
+        .accounts({ oracle: oraclePda })
+        .rpc();
+      console.log("Oracle updated to $80");
 
       // Snapshot state before close
       const positionBefore = await fetchSolPosition();
@@ -552,11 +415,6 @@ describe("Full Flow Test", () => {
       const collateralAccountBefore = await getAccount(connection, userCollateralPda);
       const vaultAccountBefore = await getAccount(connection, vaultPda);
 
-      console.log(
-        "Position collateral:",
-        positionBefore!.collateral.toNumber() / 1_000_000,
-        "USDC"
-      );
       console.log(
         "User collateral token balance before:",
         Number(collateralAccountBefore.amount) / 1_000_000,
@@ -650,7 +508,7 @@ describe("Full Flow Test", () => {
 
       // Oracle is still at $80 — open a new 1-SOL LONG at 1x leverage
       const openTx = await program.methods
-        .openPosition(SOL_MINT, { long: {} }, POSITION_SIZE_SMALL, LEVERAGE_1X)
+        .openPosition(SOL_MINT, { long: {} }, POSITION_SIZE_SMALL)
         .accounts({
           user: wallet.publicKey,
           markets: marketsPda,
@@ -673,11 +531,6 @@ describe("Full Flow Test", () => {
       const collateralAccountBefore = await getAccount(connection, userCollateralPda);
       const vaultAccountBefore = await getAccount(connection, vaultPda);
 
-      console.log(
-        "Position collateral:",
-        positionBefore!.collateral.toNumber() / 1_000_000,
-        "USDC"
-      );
       console.log(
         "User collateral token balance before:",
         Number(collateralAccountBefore.amount) / 1_000_000,
@@ -816,8 +669,8 @@ describe("Full Flow Test", () => {
   });
 
   describe("Step 8: Leverage-specific Tests", () => {
-    it("should verify leveraged position locks correct collateral", async () => {
-      console.log("\n🚀 Step 8a: Testing leveraged collateral calculation...");
+    it("should track notional OI when opening a position", async () => {
+      console.log("\n🚀 Step 8a: Testing notional OI tracking...");
 
       // Deposit more collateral for testing
       await mintTo(
@@ -835,10 +688,9 @@ describe("Full Flow Test", () => {
         .accounts({ oracle: oraclePda })
         .rpc();
 
-      // Open 5 SOL LONG at 5x leverage ($100 price)
-      // Notional = 5 * $100 = $500, Collateral = $500 / 5 = $100
+      // Open 5 SOL LONG ($100 price). Notional = 5 * $100 = $500
       const tx = await program.methods
-        .openPosition(SOL_MINT, { long: {} }, POSITION_SIZE, LEVERAGE_5X)
+        .openPosition(SOL_MINT, { long: {} }, POSITION_SIZE)
         .accounts({
           user: wallet.publicKey,
           markets: marketsPda,
@@ -846,18 +698,13 @@ describe("Full Flow Test", () => {
           userCollateralTokenAccount: userCollateralPda,
         })
         .rpc();
-      console.log("Opened 5-SOL LONG at 5x leverage. TX:", tx);
+      console.log("Opened 5-SOL LONG. TX:", tx);
 
       const position = await fetchSolPosition();
       assert.isDefined(position, "Position should exist");
-      const expectedCollateral = 100_000_000; // $100 USDC in 6-decimal
-      assert.equal(
-        position!.collateral.toNumber(),
-        expectedCollateral,
-        "Collateral should be notional/leverage = $500/$5 = $100"
-      );
 
-      // Verify OI tracks notional, not collateral
+      // Verify OI tracks full notional — cross-margin means the entire account
+      // balance backs the position, not a per-position collateral carve-out.
       const marketsAccount = await program.account.markets.fetch(marketsPda);
       const market = marketsAccount.perps.find(
         (m) => m.tokenMint.toString() === SOL_MINT.toString()
@@ -866,11 +713,10 @@ describe("Full Flow Test", () => {
       assert.equal(
         market.totalLongOi.toString(),
         expectedNotional.toString(),
-        "OI should track notional value ($500), not collateral ($100)"
+        "OI should track full notional value ($500)"
       );
 
-      console.log("✓ Leveraged collateral calculation verified");
-      console.log("  Collateral locked: $" + position!.collateral.toNumber() / 1_000_000);
+      console.log("✓ Notional OI tracking verified");
       console.log("  OI (notional): $" + market.totalLongOi.toNumber() / 1_000_000);
 
       // Close the position for cleanup
@@ -888,12 +734,296 @@ describe("Full Flow Test", () => {
       console.log("✓ Position closed for cleanup");
     });
 
-    it("should amplify PnL with leverage", async () => {
-      console.log("\n🚀 Step 8c: Testing PnL amplification with leverage...");
+    it("should realize full loss beyond former per-position margin cap", async () => {
+      // Under the old isolated-collateral model a 5-SOL LONG at $100 would have
+      // locked $100 collateral (notional/max_leverage = $500/5) and capped loss
+      // at $100 inside settle_pnl. In true cross-margin, the loss is bounded
+      // only by the account's total collateral balance, so a $50 price drop
+      // ($250 loss) must move the full $250 — not $100.
+      console.log("\n🚀 Step 8b: Testing cross-margin loss beyond former cap...");
 
-      // Open 5 SOL LONG at $100 with 5x leverage (collateral = $100)
+      // Reset oracle to $100 and open a fresh 5-SOL LONG
       await program.methods
-        .openPosition(SOL_MINT, { long: {} }, POSITION_SIZE, LEVERAGE_5X)
+        .updateOracle(SOL_MINT, INITIAL_PRICE)
+        .accounts({ oracle: oraclePda })
+        .rpc();
+
+      await program.methods
+        .openPosition(SOL_MINT, { long: {} }, POSITION_SIZE)
+        .accounts({
+          user: wallet.publicKey,
+          markets: marketsPda,
+          oracle: oraclePda,
+          userCollateralTokenAccount: userCollateralPda,
+        })
+        .rpc();
+
+      const collateralBefore = await getAccount(connection, userCollateralPda);
+      const vaultBefore = await getAccount(connection, vaultPda);
+
+      // Drop oracle to $50 → loss = 5 SOL * $50 = $250
+      const CRASH_PRICE = new BN(50_000_000);
+      await program.methods
+        .updateOracle(SOL_MINT, CRASH_PRICE)
+        .accounts({ oracle: oraclePda })
+        .rpc();
+
+      await program.methods
+        .closePosition(SOL_MINT)
+        .accounts({
+          user: wallet.publicKey,
+          markets: marketsPda,
+          oracle: oraclePda,
+          config: configPda,
+          userCollateralTokenAccount: userCollateralPda,
+          vault: vaultPda,
+        })
+        .rpc();
+
+      const collateralAfter = await getAccount(connection, userCollateralPda);
+      const vaultAfter = await getAccount(connection, vaultPda);
+
+      const userDelta = collateralBefore.amount - collateralAfter.amount;
+      const vaultDelta = vaultAfter.amount - vaultBefore.amount;
+      console.log("User collateral loss:", Number(userDelta) / 1_000_000, "USDC");
+      console.log("Vault gain:", Number(vaultDelta) / 1_000_000, "USDC");
+
+      // Full $250 loss moves from user to vault — the old $100 per-position cap
+      // is gone, and the settlement is bounded only by the user's balance.
+      assert.equal(
+        userDelta.toString(),
+        "250000000",
+        "User should lose the full $250, not the old $100 per-position cap"
+      );
+      assert.equal(
+        vaultDelta.toString(),
+        "250000000",
+        "Vault should receive the full $250 loss"
+      );
+
+      // Reset oracle for following tests
+      await program.methods
+        .updateOracle(SOL_MINT, INITIAL_PRICE)
+        .accounts({ oracle: oraclePda })
+        .rpc();
+
+      console.log("✓ Cross-margin full-loss settlement verified");
+    });
+
+    it("should reject a trade that exceeds the market's max leverage", async () => {
+      // Market is configured with max_leverage = 10x (MARGIN_PRECISION / 10
+      // = 100_000 initial margin ratio), so the required initial margin for a
+      // $500 notional position is $50. With only $40 of equity we must be rejected.
+      console.log("\n🚀 Step 8d: Testing per-market max-leverage rejection...");
+
+      // Drain the user to $40 by withdrawing the rest.
+      const before = await getAccount(connection, userCollateralPda);
+      const TARGET_BALANCE = new BN(40_000_000); // $40
+      const withdrawAmt = new BN(before.amount.toString()).sub(TARGET_BALANCE);
+      if (withdrawAmt.gtn(0)) {
+        await program.methods
+          .withdrawCollateral(withdrawAmt)
+          .accounts({
+            user: wallet.publicKey,
+            userAccount: userAccountPda,
+            config: configPda,
+            userCollateralTokenAccount: userCollateralPda,
+            userTokenAccount: userTokenAccount,
+            markets: marketsPda,
+            oracle: oraclePda,
+          })
+          .rpc();
+      }
+
+      // Reset oracle to $100 so the notional math is clean.
+      await program.methods
+        .updateOracle(SOL_MINT, INITIAL_PRICE)
+        .accounts({ oracle: oraclePda })
+        .rpc();
+
+      // Try to open 5 SOL LONG ($500 notional). Requires $50 initial margin;
+      // equity is only $40 → must fail with InitialMarginExceeded.
+      let threw = false;
+      try {
+        await program.methods
+          .openPosition(SOL_MINT, { long: {} }, POSITION_SIZE)
+          .accounts({
+            user: wallet.publicKey,
+            markets: marketsPda,
+            oracle: oraclePda,
+            userCollateralTokenAccount: userCollateralPda,
+          })
+          .rpc();
+      } catch (err: any) {
+        threw = true;
+        const msg = err?.toString?.() ?? "";
+        assert.match(
+          msg,
+          /InitialMarginExceeded|initial margin/i,
+          "Error should be InitialMarginExceeded"
+        );
+      }
+      assert.isTrue(threw, "Open should have been rejected by initial margin check");
+
+      // A smaller 3 SOL position ($300 notional → $30 required) should succeed.
+      await program.methods
+        .openPosition(SOL_MINT, { long: {} }, new BN(3_000_000))
+        .accounts({
+          user: wallet.publicKey,
+          markets: marketsPda,
+          oracle: oraclePda,
+          userCollateralTokenAccount: userCollateralPda,
+        })
+        .rpc();
+      console.log("✓ $300 notional position opened within 10x cap");
+
+      // Cleanup: close and top balance back up for following tests.
+      await program.methods
+        .closePosition(SOL_MINT)
+        .accounts({
+          user: wallet.publicKey,
+          markets: marketsPda,
+          oracle: oraclePda,
+          config: configPda,
+          userCollateralTokenAccount: userCollateralPda,
+          vault: vaultPda,
+        })
+        .rpc();
+
+      await mintTo(
+        connection,
+        wallet.payer,
+        usdcMint,
+        userCollateralPda,
+        wallet.publicKey,
+        2_000_000_000
+      );
+
+      console.log("✓ Max-leverage enforcement verified");
+    });
+
+    it("should reject a withdrawal that would bypass max_leverage", async () => {
+      // Regression for the old enforce_initial_margin=false withdrawal path.
+      // Previously a user could open at the initial-margin line and then
+      // immediately withdraw collateral down to the maintenance line, shrinking
+      // the denominator and silently exceeding max_leverage. Withdrawals are now
+      // gated on initial margin, so that shortcut must revert.
+      console.log("\n🚀 Step 8b2: Testing withdrawal max-leverage bypass rejection...");
+
+      // Reset oracle to $100 so notional math stays clean.
+      await program.methods
+        .updateOracle(SOL_MINT, INITIAL_PRICE)
+        .accounts({ oracle: oraclePda })
+        .rpc();
+
+      // Drain user collateral to exactly $100.
+      const before = await getAccount(connection, userCollateralPda);
+      const TARGET_BALANCE = new BN(100_000_000); // $100
+      const drainAmt = new BN(before.amount.toString()).sub(TARGET_BALANCE);
+      if (drainAmt.gtn(0)) {
+        await program.methods
+          .withdrawCollateral(drainAmt)
+          .accounts({
+            user: wallet.publicKey,
+            userAccount: userAccountPda,
+            config: configPda,
+            userCollateralTokenAccount: userCollateralPda,
+            userTokenAccount: userTokenAccount,
+            markets: marketsPda,
+            oracle: oraclePda,
+          })
+          .rpc();
+      }
+
+      // Open 5 SOL LONG ($500 notional). Initial margin = $500 / 10x = $50;
+      // equity is $100 → opens successfully with $50 of headroom above initial.
+      await program.methods
+        .openPosition(SOL_MINT, { long: {} }, POSITION_SIZE)
+        .accounts({
+          user: wallet.publicKey,
+          markets: marketsPda,
+          oracle: oraclePda,
+          userCollateralTokenAccount: userCollateralPda,
+        })
+        .rpc();
+
+      // Try to withdraw $55. That would leave $45 equity, still above the $25
+      // maintenance floor (5% of $500) but below the $50 initial requirement.
+      // Under the new rule this must revert with InitialMarginExceeded.
+      let threw = false;
+      try {
+        await program.methods
+          .withdrawCollateral(new BN(55_000_000))
+          .accounts({
+            user: wallet.publicKey,
+            userAccount: userAccountPda,
+            config: configPda,
+            userCollateralTokenAccount: userCollateralPda,
+            userTokenAccount: userTokenAccount,
+            markets: marketsPda,
+            oracle: oraclePda,
+          })
+          .rpc();
+      } catch (err: any) {
+        threw = true;
+        const msg = err?.toString?.() ?? "";
+        assert.match(
+          msg,
+          /InitialMarginExceeded|initial margin/i,
+          "Withdraw should revert with InitialMarginExceeded"
+        );
+      }
+      assert.isTrue(
+        threw,
+        "Withdrawal that crosses initial margin must be rejected"
+      );
+
+      // A $45 withdrawal leaves $55 equity, above the $50 initial — allowed.
+      await program.methods
+        .withdrawCollateral(new BN(45_000_000))
+        .accounts({
+          user: wallet.publicKey,
+          userAccount: userAccountPda,
+          config: configPda,
+          userCollateralTokenAccount: userCollateralPda,
+          userTokenAccount: userTokenAccount,
+          markets: marketsPda,
+          oracle: oraclePda,
+        })
+        .rpc();
+      console.log("✓ $45 withdrawal within initial margin succeeded");
+
+      // Cleanup: close position and top balance back up for following tests.
+      await program.methods
+        .closePosition(SOL_MINT)
+        .accounts({
+          user: wallet.publicKey,
+          markets: marketsPda,
+          oracle: oraclePda,
+          config: configPda,
+          userCollateralTokenAccount: userCollateralPda,
+          vault: vaultPda,
+        })
+        .rpc();
+
+      await mintTo(
+        connection,
+        wallet.payer,
+        usdcMint,
+        userCollateralPda,
+        wallet.publicKey,
+        2_000_000_000
+      );
+
+      console.log("✓ Withdrawal max-leverage bypass is blocked");
+    });
+
+    it("should compute price PnL linearly in size", async () => {
+      console.log("\n🚀 Step 8c: Testing price PnL calculation...");
+
+      // Open 5 SOL LONG at $100
+      await program.methods
+        .openPosition(SOL_MINT, { long: {} }, POSITION_SIZE)
         .accounts({
           user: wallet.publicKey,
           markets: marketsPda,
@@ -910,27 +1040,26 @@ describe("Full Flow Test", () => {
         .rpc();
 
       // PnL = 5 SOL * ($120 - $100) = $100 profit
-      // On $100 collateral this is 100% return (5x leveraged 20% move)
-      const positionInfo = await program.methods
-        .viewPositionPnl(SOL_MINT)
-        .accounts({
-          markets: marketsPda,
-          userAccount: userAccountPda,
-          oracle: oraclePda,
-        })
-        .view();
-
-      const pricePnl = positionInfo.pnlInfo.price.toNumber();
+      // Computed client-side from position.size * (currentPrice - entryPrice) / 1e6
+      const position = await fetchSolPosition();
+      assert.isDefined(position, "Position should exist");
+      const pricePnl = position!.positionSize
+        .mul(NEW_PRICE.sub(position!.entryPrice))
+        .div(new BN(1_000_000))
+        .toNumber();
       const expectedPnl = 100_000_000; // $100 profit
       assert.equal(pricePnl, expectedPnl, "PnL should be $100 (5 SOL * $20 move)");
 
-      const position = await fetchSolPosition();
-      assert.isDefined(position, "Position should exist");
-      const returnPct = (pricePnl / position!.collateral.toNumber()) * 100;
-      console.log("  Collateral: $" + position!.collateral.toNumber() / 1_000_000);
+      // Return relative to entry notional ($500): $100 / $500 = 20%
+      const entryNotional = position!.positionSize
+        .mul(position!.entryPrice)
+        .div(new BN(1_000_000))
+        .toNumber();
+      const returnPct = (pricePnl / entryNotional) * 100;
+      console.log("  Entry notional: $" + entryNotional / 1_000_000);
       console.log("  PnL: $" + pricePnl / 1_000_000);
-      console.log("  Return: " + returnPct.toFixed(0) + "% (5x leveraged 20% price move)");
-      assert.equal(returnPct, 100, "Return should be 100% (5x * 20%)");
+      console.log("  Return on notional: " + returnPct.toFixed(0) + "%");
+      assert.equal(returnPct, 20, "Return on notional should equal the 20% price move");
 
       // Close and clean up
       await program.methods
@@ -959,7 +1088,7 @@ describe("Full Flow Test", () => {
         .rpc();
 
       await program.methods
-        .openPosition(SOL_MINT, { long: {} }, POSITION_SIZE, LEVERAGE_5X)
+        .openPosition(SOL_MINT, { long: {} }, POSITION_SIZE)
         .accounts({
           user: wallet.publicKey,
           markets: marketsPda,
@@ -981,10 +1110,10 @@ describe("Full Flow Test", () => {
       const collateralBefore = await getAccount(connection, userCollateralPda);
       const vaultBefore = await getAccount(connection, vaultPda);
 
-      // Update position: same direction, new size 3 SOL, 5x leverage
+      // Update position: same direction, new size 3 SOL
       const NEW_SIZE = new BN(3_000_000); // 3 SOL
       const tx = await program.methods
-        .updatePosition(SOL_MINT, { long: {} }, NEW_SIZE, LEVERAGE_5X)
+        .updatePosition(SOL_MINT, { long: {} }, NEW_SIZE)
         .accounts({
           user: wallet.publicKey,
           markets: marketsPda,
@@ -1022,14 +1151,6 @@ describe("Full Flow Test", () => {
         position!.entryPrice.toString(),
         UPDATE_PRICE.toString(),
         "Entry price should be reset to current oracle price ($120)"
-      );
-
-      // New collateral: 3 SOL * $120 / 5x = $72
-      const expectedNewCollateral = 72_000_000;
-      assert.equal(
-        position!.collateral.toNumber(),
-        expectedNewCollateral,
-        "Collateral should be recalculated for new position"
       );
 
       // Verify OI was updated
@@ -1072,7 +1193,7 @@ describe("Full Flow Test", () => {
 
       const SIZE_2SOL = new BN(2_000_000);
       await program.methods
-        .openPosition(SOL_MINT, { long: {} }, SIZE_2SOL, LEVERAGE_5X)
+        .openPosition(SOL_MINT, { long: {} }, SIZE_2SOL)
         .accounts({
           user: wallet.publicKey,
           markets: marketsPda,
@@ -1094,10 +1215,10 @@ describe("Full Flow Test", () => {
       const collateralBefore = await getAccount(connection, userCollateralPda);
       const vaultBefore = await getAccount(connection, vaultPda);
 
-      // Flip to SHORT, 4 SOL at 5x
+      // Flip to SHORT, 4 SOL
       const SIZE_4SOL = new BN(4_000_000);
       const tx = await program.methods
-        .updatePosition(SOL_MINT, { short: {} }, SIZE_4SOL, LEVERAGE_5X)
+        .updatePosition(SOL_MINT, { short: {} }, SIZE_4SOL)
         .accounts({
           user: wallet.publicKey,
           markets: marketsPda,

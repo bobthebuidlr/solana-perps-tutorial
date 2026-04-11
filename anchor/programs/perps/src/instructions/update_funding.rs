@@ -1,10 +1,10 @@
 use anchor_lang::prelude::*;
 
-use crate::{state::Markets, update_funding_indices};
+use crate::{constants::MARKETS_SEED, state::Markets, update_funding_indices};
 
 #[derive(Accounts)]
 pub struct UpdateFunding<'info> {
-    #[account(mut)]
+    #[account(mut, seeds = [MARKETS_SEED], bump)]
     pub markets: Account<'info, Markets>,
 }
 

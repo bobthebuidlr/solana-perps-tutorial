@@ -58,7 +58,10 @@ pub fn handler(ctx: Context<WithdrawCollateral>, amount: u64) -> Result<()> {
     require!(token_balance >= amount, ErrorCode::InsufficientCollateral);
 
     // Post-withdrawal health check: simulate the balance after the transfer
-    // and require that equity still covers maintenance margin.
+    // and require that equity still clears both maintenance and initial margin.
+    // Enforcing initial margin here prevents a max_leverage bypass where a user
+    // opens at the cap and then immediately withdraws collateral to shrink the
+    // denominator.
     let post_withdrawal_balance = token_balance
         .checked_sub(amount)
         .ok_or(ErrorCode::ArithmeticOverflow)?;

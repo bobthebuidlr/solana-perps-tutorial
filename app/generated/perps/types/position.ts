@@ -33,7 +33,6 @@ export type Position = {
   direction: PositionDirection;
   entryPrice: bigint;
   positionSize: bigint;
-  collateral: bigint;
   entryFundingIndex: bigint;
 };
 
@@ -42,7 +41,6 @@ export type PositionArgs = {
   direction: PositionDirectionArgs;
   entryPrice: number | bigint;
   positionSize: number | bigint;
-  collateral: number | bigint;
   entryFundingIndex: number | bigint;
 };
 
@@ -52,7 +50,6 @@ export function getPositionEncoder(): FixedSizeEncoder<PositionArgs> {
     ["direction", getPositionDirectionEncoder()],
     ["entryPrice", getU64Encoder()],
     ["positionSize", getU64Encoder()],
-    ["collateral", getU64Encoder()],
     ["entryFundingIndex", getI128Encoder()],
   ]);
 }
@@ -63,7 +60,6 @@ export function getPositionDecoder(): FixedSizeDecoder<Position> {
     ["direction", getPositionDirectionDecoder()],
     ["entryPrice", getU64Decoder()],
     ["positionSize", getU64Decoder()],
-    ["collateral", getU64Decoder()],
     ["entryFundingIndex", getI128Decoder()],
   ]);
 }

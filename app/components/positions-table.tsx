@@ -11,6 +11,7 @@ import { useOraclePrices } from "../hooks/useOraclePrices";
 import { usePositions } from "../hooks/usePositions";
 import { USDC_DECIMALS, TOKEN_DECIMALS } from "../lib/constants";
 import { getSymbol, iconColorClass } from "../lib/format";
+import { calculateFundingPnl, calculatePricePnl } from "../lib/pnl";
 
 /**
  * Formats a raw u64 token quantity (6-decimal precision) into a display string.
@@ -206,22 +207,11 @@ function PositionRow({
   const { closePosition, isLoading: isClosing, error: closeError } = useClosePosition();
   const isLong = position.direction === PositionDirection.Long;
 
-  // Client-side price PnL — same formula as on-chain calculate_price_pnl
-  const pricePnl = currentPrice !== null
-    ? isLong
-      ? (position.positionSize * currentPrice - position.positionSize * position.entryPrice) / BigInt(10 ** TOKEN_DECIMALS)
-      : (position.positionSize * position.entryPrice - position.positionSize * currentPrice) / BigInt(10 ** TOKEN_DECIMALS)
-    : null;
-
-  // Client-side funding PnL — uses cumulative funding indices from market
-  let fundingPnl: bigint | null = null;
-  if (market) {
-    const currentIndex = isLong ? market.cumulativeFundingLong : market.cumulativeFundingShort;
-    const indexDiff = currentIndex - position.entryFundingIndex;
-    const payment = indexDiff * position.collateral / BigInt(1_000_000);
-    fundingPnl = isLong ? -payment : payment;
-  }
-
+  // PnL components are computed client-side from the same inputs the on-chain
+  // math uses — see app/lib/pnl.ts. Kept in the component (not a hook) because
+  // it's a pure function of already-reactive props.
+  const pricePnl = currentPrice !== null ? calculatePricePnl(position, currentPrice) : null;
+  const fundingPnl = market ? calculateFundingPnl(position, market) : null;
   const totalPnl = pricePnl !== null && fundingPnl !== null ? pricePnl + fundingPnl : null;
   const name =
     market?.name ?? `${position.perpsMarket.toString().slice(0, 6)}…`;

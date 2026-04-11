@@ -108,14 +108,12 @@ export type UpdatePositionInstructionData = {
   tokenMint: Address;
   direction: PositionDirection;
   size: bigint;
-  leverage: bigint;
 };
 
 export type UpdatePositionInstructionDataArgs = {
   tokenMint: Address;
   direction: PositionDirectionArgs;
   size: number | bigint;
-  leverage: number | bigint;
 };
 
 export function getUpdatePositionInstructionDataEncoder(): FixedSizeEncoder<UpdatePositionInstructionDataArgs> {
@@ -125,7 +123,6 @@ export function getUpdatePositionInstructionDataEncoder(): FixedSizeEncoder<Upda
       ["tokenMint", getAddressEncoder()],
       ["direction", getPositionDirectionEncoder()],
       ["size", getU64Encoder()],
-      ["leverage", getU64Encoder()],
     ]),
     (value) => ({ ...value, discriminator: UPDATE_POSITION_DISCRIMINATOR }),
   );
@@ -137,7 +134,6 @@ export function getUpdatePositionInstructionDataDecoder(): FixedSizeDecoder<Upda
     ["tokenMint", getAddressDecoder()],
     ["direction", getPositionDirectionDecoder()],
     ["size", getU64Decoder()],
-    ["leverage", getU64Decoder()],
   ]);
 }
 
@@ -172,7 +168,6 @@ export type UpdatePositionAsyncInput<
   tokenMint: UpdatePositionInstructionDataArgs["tokenMint"];
   direction: UpdatePositionInstructionDataArgs["direction"];
   size: UpdatePositionInstructionDataArgs["size"];
-  leverage: UpdatePositionInstructionDataArgs["leverage"];
 };
 
 export async function getUpdatePositionInstructionAsync<
@@ -330,7 +325,6 @@ export type UpdatePositionInput<
   tokenMint: UpdatePositionInstructionDataArgs["tokenMint"];
   direction: UpdatePositionInstructionDataArgs["direction"];
   size: UpdatePositionInstructionDataArgs["size"];
-  leverage: UpdatePositionInstructionDataArgs["leverage"];
 };
 
 export function getUpdatePositionInstruction<

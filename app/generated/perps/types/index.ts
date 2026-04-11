@@ -8,7 +8,5 @@
 
 export * from "./oraclePrice";
 export * from "./perpsMarket";
-export * from "./pnlInfo";
 export * from "./position";
 export * from "./positionDirection";
-export * from "./positionInfo";

@@ -63,9 +63,8 @@ pub mod perps {
         token_mint: Pubkey,
         direction: PositionDirection,
         amount: u64,
-        leverage: u64,
     ) -> Result<()> {
-        open_position::handler(ctx, token_mint, direction, amount, leverage)
+        open_position::handler(ctx, token_mint, direction, amount)
     }
 
     pub fn update_position(
@@ -73,19 +72,11 @@ pub mod perps {
         token_mint: Pubkey,
         direction: PositionDirection,
         size: u64,
-        leverage: u64,
     ) -> Result<()> {
-        update_position::handler(ctx, token_mint, direction, size, leverage)
+        update_position::handler(ctx, token_mint, direction, size)
     }
 
     pub fn close_position(ctx: Context<ClosePosition>, token_mint: Pubkey) -> Result<()> {
         close_position::handler(ctx, token_mint)
-    }
-
-    pub fn view_position_pnl(
-        ctx: Context<ViewPositionPnl>,
-        token_mint: Pubkey,
-    ) -> Result<PositionInfo> {
-        view_position_pnl::handler(ctx, token_mint)
     }
 }

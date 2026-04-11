@@ -3,9 +3,9 @@ use anchor_spl::token::{Token, TokenAccount};
 
 use crate::{
     add_open_interest, calculate_funding_pnl, calculate_notional, calculate_price_pnl,
-    check_user_account_health, constants::*, error::ErrorCode, remove_open_interest, settle_pnl,
-    update_funding_indices, Markets, Oracle, PositionDirection, ProtocolConfig, UserAccount,
-    LEVERAGE_PRECISION,
+    check_user_account_health, constants::*, error::ErrorCode, get_oracle_price,
+    remove_open_interest, settle_pnl, update_funding_indices, Markets, Oracle, PositionDirection,
+    ProtocolConfig, UserAccount,
 };
 
 #[derive(Accounts)]
@@ -58,14 +58,12 @@ pub struct UpdatePosition<'info> {
 /// @param token_mint Market token mint
 /// @param direction New direction (Long or Short)
 /// @param size New position size in base units
-/// @param leverage New leverage multiplier (6-decimal)
 /// @return Result<()>
 pub fn handler(
     ctx: Context<UpdatePosition>,
     token_mint: Pubkey,
     direction: PositionDirection,
     size: u64,
-    leverage: u64,
 ) -> Result<()> {
     let clock = Clock::get()?;
     let markets = &mut ctx.accounts.markets;
@@ -73,14 +71,7 @@ pub fn handler(
     // CRITICAL: Update funding indices BEFORE OI changes
     update_funding_indices(&mut markets.perps, clock.unix_timestamp)?;
 
-    let oracle_price = ctx
-        .accounts
-        .oracle
-        .prices
-        .iter()
-        .find(|p| p.token_mint == token_mint)
-        .ok_or(error!(ErrorCode::OraclePriceNotFound))?
-        .price;
+    let oracle_price = get_oracle_price(&ctx.accounts.oracle, token_mint)?;
 
     // --- Step 1: Look up the existing position and realize its PnL ---
     let existing = ctx
@@ -99,7 +90,7 @@ pub fn handler(
         .ok_or(error!(ErrorCode::MarketNotFound))?;
 
     let price_pnl = calculate_price_pnl(&existing, oracle_price)?;
-    let funding_pnl = calculate_funding_pnl(&existing, perps_market, None)?;
+    let funding_pnl = calculate_funding_pnl(&existing, perps_market)?;
     let total_pnl = price_pnl
         .checked_add(funding_pnl)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
@@ -112,7 +103,6 @@ pub fn handler(
 
     settle_pnl(
         total_pnl,
-        existing.collateral,
         &ctx.accounts.user_collateral_token_account,
         &ctx.accounts.vault,
         &ctx.accounts.token_program,
@@ -133,12 +123,6 @@ pub fn handler(
     // --- Step 3: Compute new position values and add new OI ---
     let new_notional = calculate_notional(size, oracle_price)?;
 
-    let new_collateral = (new_notional as u128)
-        .checked_mul(LEVERAGE_PRECISION as u128)
-        .ok_or(ErrorCode::ArithmeticOverflow)?
-        .checked_div(leverage as u128)
-        .ok_or(ErrorCode::ArithmeticOverflow)? as u64;
-
     add_open_interest(perps_market, direction, new_notional)?;
 
     let new_funding_index = match direction {
@@ -157,7 +141,6 @@ pub fn handler(
     position.direction = direction;
     position.entry_price = oracle_price;
     position.position_size = size;
-    position.collateral = new_collateral;
     position.entry_funding_index = new_funding_index;
 
     // --- Step 5: Post-trade cross-margin health check ---

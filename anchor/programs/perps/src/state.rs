@@ -67,21 +67,5 @@ pub struct Position {
     pub direction: PositionDirection,
     pub entry_price: u64,
     pub position_size: u64,
-    pub collateral: u64,
     pub entry_funding_index: i128,
-}
-
-#[derive(AnchorSerialize, AnchorDeserialize, Debug, InitSpace)]
-pub struct PositionInfo {
-    pub size: u64,
-    pub direction: PositionDirection,
-    pub entry_price: u64,
-    pub pnl_info: PnlInfo,
-}
-
-#[derive(AnchorSerialize, AnchorDeserialize, Debug, InitSpace)]
-pub struct PnlInfo {
-    pub price: i64,
-    pub funding: i64,
-    pub total: i64,
 }

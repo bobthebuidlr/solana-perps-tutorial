@@ -36,10 +36,13 @@ export const PERPS_ERROR__POSITION_NOT_FOUND = 0x1778; // 6008
 export const PERPS_ERROR__MARKET_ALREADY_HAS_POSITION = 0x1779; // 6009
 /** MaxPositionsReached: User has reached the maximum number of open positions */
 export const PERPS_ERROR__MAX_POSITIONS_REACHED = 0x177a; // 6010
+/** InitialMarginExceeded: Trade exceeds the market's initial margin limit (max leverage) */
+export const PERPS_ERROR__INITIAL_MARGIN_EXCEEDED = 0x177b; // 6011
 
 export type PerpsError =
   | typeof PERPS_ERROR__ARITHMETIC_OVERFLOW
   | typeof PERPS_ERROR__BELOW_MAINTENANCE_MARGIN
+  | typeof PERPS_ERROR__INITIAL_MARGIN_EXCEEDED
   | typeof PERPS_ERROR__INSUFFICIENT_COLLATERAL
   | typeof PERPS_ERROR__INSUFFICIENT_VAULT_FUNDS
   | typeof PERPS_ERROR__INVALID_AMOUNT
@@ -55,6 +58,7 @@ if (process.env.NODE_ENV !== "production") {
   perpsErrorMessages = {
     [PERPS_ERROR__ARITHMETIC_OVERFLOW]: `Arithmetic overflow`,
     [PERPS_ERROR__BELOW_MAINTENANCE_MARGIN]: `Operation would put account below maintenance margin`,
+    [PERPS_ERROR__INITIAL_MARGIN_EXCEEDED]: `Trade exceeds the market's initial margin limit (max leverage)`,
     [PERPS_ERROR__INSUFFICIENT_COLLATERAL]: `Insufficient collateral to perform this operation`,
     [PERPS_ERROR__INSUFFICIENT_VAULT_FUNDS]: `Vault has insufficient funds to pay settlement`,
     [PERPS_ERROR__INVALID_AMOUNT]: `Invalid amount`,

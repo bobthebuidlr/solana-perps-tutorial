@@ -37,15 +37,13 @@ export function useUpdatePosition() {
    * @param tokenMint - The token mint address of the market.
    * @param direction - New direction (Long or Short, can flip).
    * @param size - New position size in base units (token qty with 6 decimals).
-   * @param leverage - New leverage multiplier in 6-decimal (e.g. 5_000_000 = 5x).
    * @returns Transaction signature string, or null on failure.
    */
   const updatePosition = useCallback(
     async (
       tokenMint: Address,
       direction: PositionDirection,
-      size: number,
-      leverage: number
+      size: number
     ): Promise<string | null> => {
       if (!walletAddress || !wallet || !userAccountAddress || !marketsAddress || !oracleAddress || !configAddress) {
         console.error("❌ UpdatePosition: missing required accounts");
@@ -75,7 +73,6 @@ export function useUpdatePosition() {
             tokenMint,
             direction,
             size: BigInt(Math.floor(size)),
-            leverage: BigInt(Math.floor(leverage)),
           }),
         };
 

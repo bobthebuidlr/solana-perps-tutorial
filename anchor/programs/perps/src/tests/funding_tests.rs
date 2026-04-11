@@ -28,7 +28,6 @@ fn make_position(
     direction: PositionDirection,
     position_size: u64,
     entry_price: u64,
-    collateral: u64,
     entry_funding_index: i128,
 ) -> Position {
     Position {
@@ -36,7 +35,6 @@ fn make_position(
         direction,
         entry_price,
         position_size,
-        collateral,
         entry_funding_index,
     }
 }
@@ -105,10 +103,9 @@ fn long_pays_in_long_heavy_market() {
         PositionDirection::Long,
         5_000_000,   // 5 SOL
         100_000_000, // $100
-        100_000_000, // $100 collateral (5x leverage)
         0,
     );
-    let pnl = calculate_funding_pnl(&position, &market, None).unwrap();
+    let pnl = calculate_funding_pnl(&position, &market).unwrap();
     assert_eq!(pnl, -250_000);
 }
 
@@ -122,10 +119,9 @@ fn short_receives_in_long_heavy_market() {
         PositionDirection::Short,
         5_000_000,
         100_000_000,
-        100_000_000,
         0,
     );
-    let pnl = calculate_funding_pnl(&position, &market, None).unwrap();
+    let pnl = calculate_funding_pnl(&position, &market).unwrap();
     assert_eq!(pnl, 250_000);
     assert!(pnl > 0, "Short should receive when market is long-heavy");
 }
@@ -141,10 +137,9 @@ fn long_receives_in_short_heavy_market() {
         PositionDirection::Long,
         5_000_000,
         100_000_000,
-        100_000_000,
         0,
     );
-    let pnl = calculate_funding_pnl(&position, &market, None).unwrap();
+    let pnl = calculate_funding_pnl(&position, &market).unwrap();
     assert_eq!(pnl, 250_000);
     assert!(pnl > 0, "Long should receive when market is short-heavy");
 }
@@ -159,45 +154,42 @@ fn short_pays_in_short_heavy_market() {
         PositionDirection::Short,
         5_000_000,
         100_000_000,
-        100_000_000,
         0,
     );
-    let pnl = calculate_funding_pnl(&position, &market, None).unwrap();
+    let pnl = calculate_funding_pnl(&position, &market).unwrap();
     assert_eq!(pnl, -250_000);
     assert!(pnl < 0, "Short should pay when market is short-heavy");
 }
 
-// ── Funding scales with notional (leverage), not collateral ──
+// ── Funding scales with notional (size × price) ──
 
 #[test]
-fn funding_scales_with_leverage() {
+fn funding_scales_with_notional() {
     let market = make_market(1000, 0, 500, -500);
 
-    // 1x leverage: 5 SOL at $100, collateral = $500
+    // Baseline: 5 SOL at $100 = $500 notional
     let pos_1x = make_position(
         PositionDirection::Long,
         5_000_000,
         100_000_000,
-        500_000_000, // $500 collateral
         0,
     );
 
-    // 10x leverage: 50 SOL at $100, collateral = $500 (same collateral, 10x notional)
+    // 10x notional: 50 SOL at $100 = $5000 notional
     let pos_10x = make_position(
         PositionDirection::Long,
         50_000_000,  // 50 SOL
         100_000_000, // $100
-        500_000_000, // $500 collateral (same as 1x)
         0,
     );
 
-    let pnl_1x = calculate_funding_pnl(&pos_1x, &market, None).unwrap();
-    let pnl_10x = calculate_funding_pnl(&pos_10x, &market, None).unwrap();
+    let pnl_1x = calculate_funding_pnl(&pos_1x, &market).unwrap();
+    let pnl_10x = calculate_funding_pnl(&pos_10x, &market).unwrap();
 
     assert_eq!(
         pnl_10x,
         pnl_1x * 10,
-        "10x leveraged position should pay 10x more funding"
+        "10x notional position should pay 10x more funding"
     );
 }
 
@@ -210,9 +202,8 @@ fn zero_funding_when_indices_unchanged() {
         PositionDirection::Long,
         5_000_000,
         100_000_000,
-        500_000_000,
         0,
     );
-    let pnl = calculate_funding_pnl(&position, &market, None).unwrap();
+    let pnl = calculate_funding_pnl(&position, &market).unwrap();
     assert_eq!(pnl, 0);
 }

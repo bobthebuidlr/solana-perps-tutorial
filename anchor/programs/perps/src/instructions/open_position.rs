@@ -3,8 +3,8 @@ use anchor_spl::token::TokenAccount;
 
 use crate::{
     add_open_interest, calculate_notional, check_user_account_health, constants::*,
-    error::ErrorCode, update_funding_indices, Markets, Oracle, Position, PositionDirection,
-    UserAccount, LEVERAGE_PRECISION,
+    error::ErrorCode, get_oracle_price, update_funding_indices, Markets, Oracle, Position,
+    PositionDirection, UserAccount,
 };
 
 #[derive(Accounts)]
@@ -32,20 +32,20 @@ pub struct OpenPosition<'info> {
     pub user_collateral_token_account: Account<'info, TokenAccount>,
 }
 
-/// Opens a new leveraged position inline in the user account.
+/// Opens a new perps position under cross-margin. The user's collateral balance
+/// backs every position in the account; initial-margin requirements are enforced
+/// by the post-trade cross-margin health check, not by a per-position collateral field.
 ///
 /// @param ctx OpenPosition accounts context
-/// @param token_mint Market token mint the position is on
+/// @param token_mint Market token mint
 /// @param direction Long or Short
-/// @param size Position size in base units (6-decimal)
-/// @param leverage Leverage multiplier (6-decimal: 1_000_000 = 1x)
+/// @param size Position size in base units
 /// @return Result<()>
 pub fn handler(
     ctx: Context<OpenPosition>,
     token_mint: Pubkey,
     direction: PositionDirection,
     size: u64,
-    leverage: u64,
 ) -> Result<()> {
     let token_balance = ctx.accounts.user_collateral_token_account.amount;
 
@@ -63,23 +63,9 @@ pub fn handler(
         ErrorCode::MaxPositionsReached
     );
 
-    let spot_price = ctx
-        .accounts
-        .oracle
-        .prices
-        .iter()
-        .find(|p| p.token_mint == token_mint)
-        .ok_or(error!(ErrorCode::OraclePriceNotFound))?
-        .price;
+    let oracle_price = get_oracle_price(&ctx.accounts.oracle, token_mint)?;
 
-    let notional = calculate_notional(size, spot_price)?;
-
-    // Required collateral (margin): notional / leverage
-    let collateral_usdc = (notional as u128)
-        .checked_mul(LEVERAGE_PRECISION as u128)
-        .ok_or(ErrorCode::ArithmeticOverflow)?
-        .checked_div(leverage as u128)
-        .ok_or(ErrorCode::ArithmeticOverflow)? as u64;
+    let notional = calculate_notional(size, oracle_price)?;
 
     let clock = Clock::get()?;
 
@@ -106,9 +92,8 @@ pub fn handler(
     ctx.accounts.user_account.positions.push(Position {
         perps_market: token_mint,
         direction,
-        entry_price: spot_price,
+        entry_price: oracle_price,
         position_size: size,
-        collateral: collateral_usdc,
         entry_funding_index: new_funding_index,
     });
 
