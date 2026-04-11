@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::TokenAccount;
 
 use crate::{
-    add_open_interest, calculate_account_health, calculate_notional, constants::*,
+    add_open_interest, calculate_notional, check_user_account_health, constants::*,
     error::ErrorCode, update_funding_indices, Markets, Oracle, Position, PositionDirection,
     UserAccount, LEVERAGE_PRECISION,
 };
@@ -13,20 +13,12 @@ pub struct OpenPosition<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 
-    #[account(mut,
+    #[account(
+      mut,
       seeds = [USER_SEED, user.key().as_ref()],
       bump = user_account.bump
     )]
     pub user_account: Account<'info, UserAccount>,
-
-    #[account(
-      init,
-      payer = user,
-      space = ANCHOR_DISCRIMINATOR + Position::INIT_SPACE,
-      seeds = [POSITION_SEED, user.key().as_ref(), token_mint.to_bytes().as_ref()],
-      bump
-    )]
-    pub position: Account<'info, Position>,
 
     #[account(mut)]
     pub markets: Account<'info, Markets>,
@@ -38,21 +30,38 @@ pub struct OpenPosition<'info> {
         bump
     )]
     pub user_collateral_token_account: Account<'info, TokenAccount>,
-
-    pub system_program: Program<'info, System>,
 }
 
-/// Opens a new leveraged position.
-/// Pass existing open positions as remaining_accounts for cross-margin health check.
-pub fn handler<'info>(
-    ctx: Context<'_, '_, 'info, 'info, OpenPosition<'info>>,
+/// Opens a new leveraged position inline in the user account.
+///
+/// @param ctx OpenPosition accounts context
+/// @param token_mint Market token mint the position is on
+/// @param direction Long or Short
+/// @param size Position size in base units (6-decimal)
+/// @param leverage Leverage multiplier (6-decimal: 1_000_000 = 1x)
+/// @return Result<()>
+pub fn handler(
+    ctx: Context<OpenPosition>,
     token_mint: Pubkey,
     direction: PositionDirection,
     size: u64,
     leverage: u64,
 ) -> Result<()> {
     let token_balance = ctx.accounts.user_collateral_token_account.amount;
-    let user_account_key = ctx.accounts.user_account.key();
+
+    // Enforce one position per market and the max-positions cap.
+    require!(
+        !ctx.accounts
+            .user_account
+            .positions
+            .iter()
+            .any(|p| p.perps_market == token_mint),
+        ErrorCode::MarketAlreadyHasPosition
+    );
+    require!(
+        ctx.accounts.user_account.positions.len() < MAX_POSITIONS,
+        ErrorCode::MaxPositionsReached
+    );
 
     let spot_price = ctx
         .accounts
@@ -63,18 +72,6 @@ pub fn handler<'info>(
         .ok_or(error!(ErrorCode::OraclePriceNotFound))?
         .price;
 
-    let market_max_leverage = ctx
-        .accounts
-        .markets
-        .perps
-        .iter()
-        .find(|m| m.token_mint == token_mint)
-        .ok_or(error!(ErrorCode::MarketNotFound))?
-        .max_leverage;
-
-    require!(leverage >= LEVERAGE_PRECISION, ErrorCode::ExceedsMaxLeverage);
-    require!(leverage <= market_max_leverage, ErrorCode::ExceedsMaxLeverage);
-
     let notional = calculate_notional(size, spot_price)?;
 
     // Required collateral (margin): notional / leverage
@@ -84,57 +81,44 @@ pub fn handler<'info>(
         .checked_div(leverage as u128)
         .ok_or(ErrorCode::ArithmeticOverflow)? as u64;
 
-    // Cross-margin check: collect existing positions from remaining_accounts
-    let mut existing_positions: Vec<Position> = Vec::new();
-    for account_info in ctx.remaining_accounts.iter() {
-        if let Ok(pos) = Account::<Position>::try_from(account_info) {
-            if pos.user_account == user_account_key {
-                existing_positions.push(pos.into_inner());
-            }
-        }
-    }
+    let clock = Clock::get()?;
 
-    let (current_equity, current_maintenance) = calculate_account_health(
-        &existing_positions,
+    // IMPORTANT: Update funding indices BEFORE OI changes, then add new OI.
+    let new_funding_index = {
+        let markets = &mut ctx.accounts.markets;
+        update_funding_indices(&mut markets.perps, clock.unix_timestamp)?;
+
+        let perps_market = markets
+            .perps
+            .iter_mut()
+            .find(|m| m.token_mint == token_mint)
+            .ok_or(error!(ErrorCode::MarketNotFound))?;
+
+        add_open_interest(perps_market, direction, notional)?;
+
+        match direction {
+            PositionDirection::Long => perps_market.cumulative_funding_long,
+            PositionDirection::Short => perps_market.cumulative_funding_short,
+        }
+    };
+
+    // Append the new position to the user's inline list.
+    ctx.accounts.user_account.positions.push(Position {
+        perps_market: token_mint,
+        direction,
+        entry_price: spot_price,
+        position_size: size,
+        collateral: collateral_usdc,
+        entry_funding_index: new_funding_index,
+    });
+
+    // Post-trade cross-margin health check. Atomically rolled back if it fails.
+    check_user_account_health(
+        &ctx.accounts.user_account,
         &ctx.accounts.markets,
         &ctx.accounts.oracle,
         token_balance,
     )?;
-
-    // Equity must cover existing maintenance margin + new position's initial margin
-    require!(
-        current_equity >= current_maintenance as i64 + collateral_usdc as i64,
-        ErrorCode::InsufficientCollateral
-    );
-
-    let clock = Clock::get()?;
-    let markets = &mut ctx.accounts.markets;
-
-    // CRITICAL: Update funding indices BEFORE OI changes
-    update_funding_indices(&mut markets.perps, clock.unix_timestamp)?;
-
-    let perps_market = markets
-        .perps
-        .iter_mut()
-        .find(|m| m.token_mint == token_mint)
-        .ok_or(error!(ErrorCode::MarketNotFound))?;
-
-    let user_account = &mut ctx.accounts.user_account;
-    let position = &mut ctx.accounts.position;
-    position.user_account = user_account.key();
-    position.perps_market = perps_market.token_mint;
-    position.direction = direction;
-    position.entry_price = spot_price;
-    position.position_size = size;
-    position.collateral = collateral_usdc;
-    position.entry_funding_index = match direction {
-        PositionDirection::Long => perps_market.cumulative_funding_long,
-        PositionDirection::Short => perps_market.cumulative_funding_short,
-    };
-    position.opened_at = clock.unix_timestamp;
-    position.bump = ctx.bumps.position;
-
-    add_open_interest(perps_market, direction, notional)?;
 
     Ok(())
 }

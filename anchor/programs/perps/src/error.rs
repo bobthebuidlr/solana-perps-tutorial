@@ -8,9 +8,6 @@ pub enum ErrorCode {
     #[msg("Arithmetic overflow")]
     ArithmeticOverflow,
 
-    #[msg("Available collateral is less than locked collateral")]
-    InvalidCollateralState,
-
     #[msg("Insufficient collateral to perform this operation")]
     InsufficientCollateral,
 
@@ -26,9 +23,15 @@ pub enum ErrorCode {
     #[msg("Vault has insufficient funds to pay settlement")]
     InsufficientVaultFunds,
 
-    #[msg("Leverage exceeds maximum allowed for this market")]
-    ExceedsMaxLeverage,
-
-    #[msg("Withdrawal would put account below maintenance margin")]
+    #[msg("Operation would put account below maintenance margin")]
     BelowMaintenanceMargin,
+
+    #[msg("No open position found for this market")]
+    PositionNotFound,
+
+    #[msg("User already has an open position on this market")]
+    MarketAlreadyHasPosition,
+
+    #[msg("User has reached the maximum number of open positions")]
+    MaxPositionsReached,
 }

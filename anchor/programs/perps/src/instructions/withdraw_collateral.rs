@@ -2,8 +2,8 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
 use crate::{
-    calculate_account_health, constants::*, error::ErrorCode, state::UserAccount, Markets, Oracle,
-    Position, ProtocolConfig,
+    check_user_account_health, constants::*, error::ErrorCode, state::UserAccount, Markets,
+    Oracle, ProtocolConfig,
 };
 
 #[derive(Accounts)]
@@ -44,44 +44,31 @@ pub struct WithdrawCollateral<'info> {
     pub token_program: Program<'info, Token>,
 }
 
-/// Withdraws collateral to the user's wallet.
-/// Pass all open positions as remaining_accounts for cross-margin health check.
-pub fn handler<'info>(ctx: Context<'_, '_, 'info, 'info, WithdrawCollateral<'info>>, amount: u64) -> Result<()> {
+/// Withdraws collateral to the user's wallet. The cross-margin health check
+/// reads the user's positions inline from their UserAccount, so callers no
+/// longer need to pass any remaining accounts.
+///
+/// @param ctx WithdrawCollateral accounts context
+/// @param amount Amount of USDC (base units) to withdraw
+/// @return Result<()>
+pub fn handler(ctx: Context<WithdrawCollateral>, amount: u64) -> Result<()> {
     require!(amount > 0, ErrorCode::InvalidAmount);
 
     let token_balance = ctx.accounts.user_collateral_token_account.amount;
     require!(token_balance >= amount, ErrorCode::InsufficientCollateral);
 
-    // Cross-margin health check
-    if !ctx.remaining_accounts.is_empty() {
-        let user_account = &ctx.accounts.user_account;
-        let mut positions: Vec<Position> = Vec::new();
-        for account_info in ctx.remaining_accounts.iter() {
-            if let Ok(position) = Account::<Position>::try_from(account_info) {
-                if position.user_account == user_account.key() {
-                    positions.push(position.into_inner());
-                }
-            }
-        }
+    // Post-withdrawal health check: simulate the balance after the transfer
+    // and require that equity still covers maintenance margin.
+    let post_withdrawal_balance = token_balance
+        .checked_sub(amount)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
 
-        if !positions.is_empty() {
-            let post_withdrawal_balance = token_balance
-                .checked_sub(amount)
-                .ok_or(ErrorCode::ArithmeticOverflow)?;
-
-            let (total_equity, total_maintenance_margin) = calculate_account_health(
-                &positions,
-                &ctx.accounts.markets,
-                &ctx.accounts.oracle,
-                post_withdrawal_balance,
-            )?;
-
-            require!(
-                total_equity >= total_maintenance_margin as i64,
-                ErrorCode::BelowMaintenanceMargin
-            );
-        }
-    }
+    check_user_account_health(
+        &ctx.accounts.user_account,
+        &ctx.accounts.markets,
+        &ctx.accounts.oracle,
+        post_withdrawal_balance,
+    )?;
 
     let collateral_bump = ctx.bumps.user_collateral_token_account;
     let user_key = ctx.accounts.user.key();

@@ -31,44 +31,26 @@ import {
 } from "@solana/kit";
 
 export type PerpsMarket = {
-  /** The token for which the perps market is trading */
   tokenMint: Address;
-  /** Name of the perps market */
   name: string;
-  /** Total long open interest */
   totalLongOi: bigint;
-  /** Total short open interest */
   totalShortOi: bigint;
-  /** Cumulative funding index for long positions */
   cumulativeFundingLong: bigint;
-  /** Cumulative funding index for short positions */
   cumulativeFundingShort: bigint;
-  /** Last funding update timestamp */
   lastFundingUpdate: bigint;
-  /** Maximum leverage allowed (6-decimal, e.g. 10_000_000 = 10x) */
   maxLeverage: bigint;
-  /** Maintenance margin ratio (6-decimal, e.g. 50_000 = 5%) */
   maintenanceMarginRatio: bigint;
 };
 
 export type PerpsMarketArgs = {
-  /** The token for which the perps market is trading */
   tokenMint: Address;
-  /** Name of the perps market */
   name: string;
-  /** Total long open interest */
   totalLongOi: number | bigint;
-  /** Total short open interest */
   totalShortOi: number | bigint;
-  /** Cumulative funding index for long positions */
   cumulativeFundingLong: number | bigint;
-  /** Cumulative funding index for short positions */
   cumulativeFundingShort: number | bigint;
-  /** Last funding update timestamp */
   lastFundingUpdate: number | bigint;
-  /** Maximum leverage allowed (6-decimal, e.g. 10_000_000 = 10x) */
   maxLeverage: number | bigint;
-  /** Maintenance margin ratio (6-decimal, e.g. 50_000 = 5%) */
   maintenanceMarginRatio: number | bigint;
 };
 

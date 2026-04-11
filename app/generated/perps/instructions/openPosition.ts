@@ -38,7 +38,6 @@ import {
 import { PERPS_PROGRAM_ADDRESS } from "../programs";
 import {
   expectAddress,
-  expectSome,
   getAccountMetaFactory,
   type ResolvedAccount,
 } from "../shared";
@@ -63,13 +62,10 @@ export type OpenPositionInstruction<
   TProgram extends string = typeof PERPS_PROGRAM_ADDRESS,
   TAccountUser extends string | AccountMeta<string> = string,
   TAccountUserAccount extends string | AccountMeta<string> = string,
-  TAccountPosition extends string | AccountMeta<string> = string,
   TAccountMarkets extends string | AccountMeta<string> = string,
   TAccountOracle extends string | AccountMeta<string> = string,
   TAccountUserCollateralTokenAccount extends string | AccountMeta<string> =
     string,
-  TAccountSystemProgram extends string | AccountMeta<string> =
-    "11111111111111111111111111111111",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
@@ -81,9 +77,6 @@ export type OpenPositionInstruction<
       TAccountUserAccount extends string
         ? WritableAccount<TAccountUserAccount>
         : TAccountUserAccount,
-      TAccountPosition extends string
-        ? WritableAccount<TAccountPosition>
-        : TAccountPosition,
       TAccountMarkets extends string
         ? WritableAccount<TAccountMarkets>
         : TAccountMarkets,
@@ -93,9 +86,6 @@ export type OpenPositionInstruction<
       TAccountUserCollateralTokenAccount extends string
         ? ReadonlyAccount<TAccountUserCollateralTokenAccount>
         : TAccountUserCollateralTokenAccount,
-      TAccountSystemProgram extends string
-        ? ReadonlyAccount<TAccountSystemProgram>
-        : TAccountSystemProgram,
       ...TRemainingAccounts,
     ]
   >;
@@ -151,22 +141,15 @@ export function getOpenPositionInstructionDataCodec(): FixedSizeCodec<
 export type OpenPositionAsyncInput<
   TAccountUser extends string = string,
   TAccountUserAccount extends string = string,
-  TAccountPosition extends string = string,
   TAccountMarkets extends string = string,
   TAccountOracle extends string = string,
   TAccountUserCollateralTokenAccount extends string = string,
-  TAccountSystemProgram extends string = string,
 > = {
-  /** User opening the position */
   user: TransactionSigner<TAccountUser>;
-  /** User collateral account */
   userAccount?: Address<TAccountUserAccount>;
-  position?: Address<TAccountPosition>;
   markets: Address<TAccountMarkets>;
   oracle: Address<TAccountOracle>;
-  /** Per-user collateral token account PDA — read to check available balance */
   userCollateralTokenAccount?: Address<TAccountUserCollateralTokenAccount>;
-  systemProgram?: Address<TAccountSystemProgram>;
   tokenMint: OpenPositionInstructionDataArgs["tokenMint"];
   direction: OpenPositionInstructionDataArgs["direction"];
   amount: OpenPositionInstructionDataArgs["amount"];
@@ -176,21 +159,17 @@ export type OpenPositionAsyncInput<
 export async function getOpenPositionInstructionAsync<
   TAccountUser extends string,
   TAccountUserAccount extends string,
-  TAccountPosition extends string,
   TAccountMarkets extends string,
   TAccountOracle extends string,
   TAccountUserCollateralTokenAccount extends string,
-  TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof PERPS_PROGRAM_ADDRESS,
 >(
   input: OpenPositionAsyncInput<
     TAccountUser,
     TAccountUserAccount,
-    TAccountPosition,
     TAccountMarkets,
     TAccountOracle,
-    TAccountUserCollateralTokenAccount,
-    TAccountSystemProgram
+    TAccountUserCollateralTokenAccount
   >,
   config?: { programAddress?: TProgramAddress },
 ): Promise<
@@ -198,11 +177,9 @@ export async function getOpenPositionInstructionAsync<
     TProgramAddress,
     TAccountUser,
     TAccountUserAccount,
-    TAccountPosition,
     TAccountMarkets,
     TAccountOracle,
-    TAccountUserCollateralTokenAccount,
-    TAccountSystemProgram
+    TAccountUserCollateralTokenAccount
   >
 > {
   // Program address.
@@ -212,14 +189,12 @@ export async function getOpenPositionInstructionAsync<
   const originalAccounts = {
     user: { value: input.user ?? null, isWritable: true },
     userAccount: { value: input.userAccount ?? null, isWritable: true },
-    position: { value: input.position ?? null, isWritable: true },
     markets: { value: input.markets ?? null, isWritable: true },
     oracle: { value: input.oracle ?? null, isWritable: false },
     userCollateralTokenAccount: {
       value: input.userCollateralTokenAccount ?? null,
       isWritable: false,
     },
-    systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -239,18 +214,6 @@ export async function getOpenPositionInstructionAsync<
       ],
     });
   }
-  if (!accounts.position.value) {
-    accounts.position.value = await getProgramDerivedAddress({
-      programAddress,
-      seeds: [
-        getBytesEncoder().encode(
-          new Uint8Array([112, 111, 115, 105, 116, 105, 111, 110]),
-        ),
-        getAddressEncoder().encode(expectAddress(accounts.user.value)),
-        getAddressEncoder().encode(expectSome(args.tokenMint)),
-      ],
-    });
-  }
   if (!accounts.userCollateralTokenAccount.value) {
     accounts.userCollateralTokenAccount.value = await getProgramDerivedAddress({
       programAddress,
@@ -265,21 +228,15 @@ export async function getOpenPositionInstructionAsync<
       ],
     });
   }
-  if (!accounts.systemProgram.value) {
-    accounts.systemProgram.value =
-      "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
-  }
 
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
     accounts: [
       getAccountMeta(accounts.user),
       getAccountMeta(accounts.userAccount),
-      getAccountMeta(accounts.position),
       getAccountMeta(accounts.markets),
       getAccountMeta(accounts.oracle),
       getAccountMeta(accounts.userCollateralTokenAccount),
-      getAccountMeta(accounts.systemProgram),
     ],
     data: getOpenPositionInstructionDataEncoder().encode(
       args as OpenPositionInstructionDataArgs,
@@ -289,33 +246,24 @@ export async function getOpenPositionInstructionAsync<
     TProgramAddress,
     TAccountUser,
     TAccountUserAccount,
-    TAccountPosition,
     TAccountMarkets,
     TAccountOracle,
-    TAccountUserCollateralTokenAccount,
-    TAccountSystemProgram
+    TAccountUserCollateralTokenAccount
   >);
 }
 
 export type OpenPositionInput<
   TAccountUser extends string = string,
   TAccountUserAccount extends string = string,
-  TAccountPosition extends string = string,
   TAccountMarkets extends string = string,
   TAccountOracle extends string = string,
   TAccountUserCollateralTokenAccount extends string = string,
-  TAccountSystemProgram extends string = string,
 > = {
-  /** User opening the position */
   user: TransactionSigner<TAccountUser>;
-  /** User collateral account */
   userAccount: Address<TAccountUserAccount>;
-  position: Address<TAccountPosition>;
   markets: Address<TAccountMarkets>;
   oracle: Address<TAccountOracle>;
-  /** Per-user collateral token account PDA — read to check available balance */
   userCollateralTokenAccount: Address<TAccountUserCollateralTokenAccount>;
-  systemProgram?: Address<TAccountSystemProgram>;
   tokenMint: OpenPositionInstructionDataArgs["tokenMint"];
   direction: OpenPositionInstructionDataArgs["direction"];
   amount: OpenPositionInstructionDataArgs["amount"];
@@ -325,32 +273,26 @@ export type OpenPositionInput<
 export function getOpenPositionInstruction<
   TAccountUser extends string,
   TAccountUserAccount extends string,
-  TAccountPosition extends string,
   TAccountMarkets extends string,
   TAccountOracle extends string,
   TAccountUserCollateralTokenAccount extends string,
-  TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof PERPS_PROGRAM_ADDRESS,
 >(
   input: OpenPositionInput<
     TAccountUser,
     TAccountUserAccount,
-    TAccountPosition,
     TAccountMarkets,
     TAccountOracle,
-    TAccountUserCollateralTokenAccount,
-    TAccountSystemProgram
+    TAccountUserCollateralTokenAccount
   >,
   config?: { programAddress?: TProgramAddress },
 ): OpenPositionInstruction<
   TProgramAddress,
   TAccountUser,
   TAccountUserAccount,
-  TAccountPosition,
   TAccountMarkets,
   TAccountOracle,
-  TAccountUserCollateralTokenAccount,
-  TAccountSystemProgram
+  TAccountUserCollateralTokenAccount
 > {
   // Program address.
   const programAddress = config?.programAddress ?? PERPS_PROGRAM_ADDRESS;
@@ -359,14 +301,12 @@ export function getOpenPositionInstruction<
   const originalAccounts = {
     user: { value: input.user ?? null, isWritable: true },
     userAccount: { value: input.userAccount ?? null, isWritable: true },
-    position: { value: input.position ?? null, isWritable: true },
     markets: { value: input.markets ?? null, isWritable: true },
     oracle: { value: input.oracle ?? null, isWritable: false },
     userCollateralTokenAccount: {
       value: input.userCollateralTokenAccount ?? null,
       isWritable: false,
     },
-    systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -376,22 +316,14 @@ export function getOpenPositionInstruction<
   // Original args.
   const args = { ...input };
 
-  // Resolve default values.
-  if (!accounts.systemProgram.value) {
-    accounts.systemProgram.value =
-      "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
-  }
-
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
     accounts: [
       getAccountMeta(accounts.user),
       getAccountMeta(accounts.userAccount),
-      getAccountMeta(accounts.position),
       getAccountMeta(accounts.markets),
       getAccountMeta(accounts.oracle),
       getAccountMeta(accounts.userCollateralTokenAccount),
-      getAccountMeta(accounts.systemProgram),
     ],
     data: getOpenPositionInstructionDataEncoder().encode(
       args as OpenPositionInstructionDataArgs,
@@ -401,11 +333,9 @@ export function getOpenPositionInstruction<
     TProgramAddress,
     TAccountUser,
     TAccountUserAccount,
-    TAccountPosition,
     TAccountMarkets,
     TAccountOracle,
-    TAccountUserCollateralTokenAccount,
-    TAccountSystemProgram
+    TAccountUserCollateralTokenAccount
   >);
 }
 
@@ -415,16 +345,11 @@ export type ParsedOpenPositionInstruction<
 > = {
   programAddress: Address<TProgram>;
   accounts: {
-    /** User opening the position */
     user: TAccountMetas[0];
-    /** User collateral account */
     userAccount: TAccountMetas[1];
-    position: TAccountMetas[2];
-    markets: TAccountMetas[3];
-    oracle: TAccountMetas[4];
-    /** Per-user collateral token account PDA — read to check available balance */
-    userCollateralTokenAccount: TAccountMetas[5];
-    systemProgram: TAccountMetas[6];
+    markets: TAccountMetas[2];
+    oracle: TAccountMetas[3];
+    userCollateralTokenAccount: TAccountMetas[4];
   };
   data: OpenPositionInstructionData;
 };
@@ -437,7 +362,7 @@ export function parseOpenPositionInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedOpenPositionInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 7) {
+  if (instruction.accounts.length < 5) {
     // TODO: Coded error.
     throw new Error("Not enough accounts");
   }
@@ -452,11 +377,9 @@ export function parseOpenPositionInstruction<
     accounts: {
       user: getNextAccount(),
       userAccount: getNextAccount(),
-      position: getNextAccount(),
       markets: getNextAccount(),
       oracle: getNextAccount(),
       userCollateralTokenAccount: getNextAccount(),
-      systemProgram: getNextAccount(),
     },
     data: getOpenPositionInstructionDataDecoder().decode(instruction.data),
   };

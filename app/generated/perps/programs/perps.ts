@@ -45,7 +45,6 @@ export const PERPS_PROGRAM_ADDRESS =
 export enum PerpsAccount {
   Markets,
   Oracle,
-  Position,
   ProtocolConfig,
   UserAccount,
 }
@@ -75,17 +74,6 @@ export function identifyPerpsAccount(
     )
   ) {
     return PerpsAccount.Oracle;
-  }
-  if (
-    containsBytes(
-      data,
-      fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([170, 188, 143, 228, 122, 64, 247, 208]),
-      ),
-      0,
-    )
-  ) {
-    return PerpsAccount.Position;
   }
   if (
     containsBytes(

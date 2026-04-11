@@ -42,7 +42,17 @@ describe("Full Flow Test", () => {
   let vaultPda: PublicKey;
   let userAccountPda: PublicKey;
   let userCollateralPda: PublicKey;
-  let positionPda: PublicKey;
+
+  /**
+   * Fetches the SOL_MINT position from the user's inline positions list.
+   * @returns The Position entry, or undefined if no such position exists.
+   */
+  async function fetchSolPosition() {
+    const userAccount = await program.account.userAccount.fetch(userAccountPda);
+    return userAccount.positions.find(
+      (p) => p.perpsMarket.toString() === SOL_MINT.toString()
+    );
+  }
 
   before(async () => {
     console.log("\n🔧 Setting up test environment...");
@@ -110,15 +120,6 @@ describe("Full Flow Test", () => {
       program.programId
     );
 
-    [positionPda] = PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("position"),
-        wallet.publicKey.toBuffer(),
-        SOL_MINT.toBuffer(),
-      ],
-      program.programId
-    );
-
     console.log("\n📍 Derived PDAs:");
     console.log("Markets PDA:", marketsPda.toString());
     console.log("Oracle PDA:", oraclePda.toString());
@@ -126,7 +127,6 @@ describe("Full Flow Test", () => {
     console.log("Vault PDA:", vaultPda.toString());
     console.log("User Account PDA:", userAccountPda.toString());
     console.log("User Collateral PDA:", userCollateralPda.toString());
-    console.log("Position PDA:", positionPda.toString());
   });
 
   describe("Step 1: Initialize the Program", () => {
@@ -337,17 +337,11 @@ describe("Full Flow Test", () => {
     it("should open a LONG position on SOL-PERP", async () => {
       console.log("\n🚀 Step 4: Opening position...");
 
-      // Check if position already exists
-      let positionExists = false;
-      try {
-        await program.account.position.fetch(positionPda);
-        positionExists = true;
+      // Check if position already exists inline on the user account
+      const existing = await fetchSolPosition();
+      if (existing) {
         console.log("⚠️  Position already exists, skipping creation...");
-      } catch (error) {
-        console.log("Position doesn't exist, creating...");
-      }
-
-      if (!positionExists) {
+      } else {
         const direction = { long: {} };
 
         const tx = await program.methods
@@ -362,42 +356,33 @@ describe("Full Flow Test", () => {
 
         console.log("✅ Position opened!");
         console.log("Transaction signature:", tx);
-        console.log("Position PDA:", positionPda.toString());
         console.log("Direction: LONG");
         console.log("Size: 5 SOL (token quantity, 6-decimal)");
         console.log("Leverage: 5x");
       }
 
-      // Verify Position exists
-      const position = await program.account.position.fetch(positionPda);
-      assert.equal(
-        position.userAccount.toString(),
-        userAccountPda.toString(),
-        "Position should reference user account"
-      );
-      assert.isDefined(position.direction.long, "Direction should be LONG");
+      // Verify Position exists inline
+      const position = await fetchSolPosition();
+      assert.isDefined(position, "Position should exist on user_account");
+      assert.isDefined(position!.direction.long, "Direction should be LONG");
 
       console.log("\nPosition State:");
       console.log(
         "- Entry price:",
-        position.entryPrice.toNumber() / 1_000_000,
+        position!.entryPrice.toNumber() / 1_000_000,
         "USD"
       );
       console.log(
         "- Position size:",
-        position.positionSize.toNumber() / 1_000_000,
+        position!.positionSize.toNumber() / 1_000_000,
         "SOL (token quantity)"
       );
       console.log(
         "- Collateral:",
-        position.collateral.toNumber() / 1_000_000,
+        position!.collateral.toNumber() / 1_000_000,
         "USDC"
       );
-      console.log("- Direction:", position.direction.long ? "LONG" : "SHORT");
-      console.log(
-        "- Opened at:",
-        new Date(position.openedAt.toNumber() * 1000).toISOString()
-      );
+      console.log("- Direction:", position!.direction.long ? "LONG" : "SHORT");
 
       console.log("✓ Position verified");
     });
@@ -429,10 +414,11 @@ describe("Full Flow Test", () => {
       console.log("Oracle updated to $150. TX:", updateTx);
 
       // Fetch on-chain position to get the actual entry price (oracle/spot price at open time)
-      const position = await program.account.position.fetch(positionPda);
+      const position = await fetchSolPosition();
+      assert.isDefined(position, "Position should exist");
       console.log(
         "Entry price:",
-        position.entryPrice.toNumber() / 1_000_000,
+        position!.entryPrice.toNumber() / 1_000_000,
         "USD"
       );
 
@@ -441,7 +427,7 @@ describe("Full Flow Test", () => {
         .viewPositionPnl(SOL_MINT)
         .accounts({
           markets: marketsPda,
-          position: positionPda,
+          userAccount: userAccountPda,
           oracle: oraclePda,
         })
         .view();
@@ -465,7 +451,7 @@ describe("Full Flow Test", () => {
 
       // Expected price PnL = position_size * (current_price − entry_price) / 10^6
       const expectedPricePnl = POSITION_SIZE.mul(
-        PROFIT_PRICE.sub(position.entryPrice)
+        PROFIT_PRICE.sub(position!.entryPrice)
       ).div(new BN(1_000_000));
       console.log("Expected price PnL (raw):", expectedPricePnl.toString());
 
@@ -500,10 +486,11 @@ describe("Full Flow Test", () => {
       console.log("Oracle updated to $80. TX:", updateTx);
 
       // Fetch on-chain position to get the actual entry price
-      const position = await program.account.position.fetch(positionPda);
+      const position = await fetchSolPosition();
+      assert.isDefined(position, "Position should exist");
       console.log(
         "Entry price:",
-        position.entryPrice.toNumber() / 1_000_000,
+        position!.entryPrice.toNumber() / 1_000_000,
         "USD"
       );
 
@@ -512,7 +499,7 @@ describe("Full Flow Test", () => {
         .viewPositionPnl(SOL_MINT)
         .accounts({
           markets: marketsPda,
-          position: positionPda,
+          userAccount: userAccountPda,
           oracle: oraclePda,
         })
         .view();
@@ -526,7 +513,7 @@ describe("Full Flow Test", () => {
       console.log("- Total PnL (raw):", positionInfo.pnlInfo.total.toString());
 
       const expectedPricePnl = POSITION_SIZE.mul(
-        LOSS_PRICE.sub(position.entryPrice)
+        LOSS_PRICE.sub(position!.entryPrice)
       ).div(new BN(1_000_000));
       console.log("Expected price PnL (raw):", expectedPricePnl.toString());
 
@@ -560,13 +547,14 @@ describe("Full Flow Test", () => {
       );
 
       // Snapshot state before close
-      const positionBefore = await program.account.position.fetch(positionPda);
+      const positionBefore = await fetchSolPosition();
+      assert.isDefined(positionBefore, "Position should exist before close");
       const collateralAccountBefore = await getAccount(connection, userCollateralPda);
       const vaultAccountBefore = await getAccount(connection, vaultPda);
 
       console.log(
         "Position collateral:",
-        positionBefore.collateral.toNumber() / 1_000_000,
+        positionBefore!.collateral.toNumber() / 1_000_000,
         "USDC"
       );
       console.log(
@@ -585,8 +573,8 @@ describe("Full Flow Test", () => {
       const oraclePrice = oracleAccount.prices.find(
         (p) => p.tokenMint.toString() === SOL_MINT.toString()
       ).price;
-      const expectedPricePnl = positionBefore.positionSize
-        .mul(oraclePrice.sub(positionBefore.entryPrice))
+      const expectedPricePnl = positionBefore!.positionSize
+        .mul(oraclePrice.sub(positionBefore!.entryPrice))
         .div(new BN(1_000_000));
 
       const tx = await program.methods
@@ -603,13 +591,12 @@ describe("Full Flow Test", () => {
 
       console.log("✅ Position closed! TX:", tx);
 
-      // Assert position PDA is gone
-      try {
-        await program.account.position.fetch(positionPda);
-        assert.fail("Position PDA should be closed");
-      } catch {
-        console.log("✓ Position PDA closed (account not found as expected)");
-      }
+      // Assert position was removed from the inline list
+      assert.isUndefined(
+        await fetchSolPosition(),
+        "Position should be gone from user_account.positions"
+      );
+      console.log("✓ Position removed from user_account.positions");
 
       // Verify actual token transfers — loss should move from user collateral to vault
       const collateralAccountAfter = await getAccount(connection, userCollateralPda);
@@ -681,13 +668,14 @@ describe("Full Flow Test", () => {
       console.log("Oracle updated to $110. TX:", updateTx);
 
       // Snapshot state before close
-      const positionBefore = await program.account.position.fetch(positionPda);
+      const positionBefore = await fetchSolPosition();
+      assert.isDefined(positionBefore, "Position should exist before close");
       const collateralAccountBefore = await getAccount(connection, userCollateralPda);
       const vaultAccountBefore = await getAccount(connection, vaultPda);
 
       console.log(
         "Position collateral:",
-        positionBefore.collateral.toNumber() / 1_000_000,
+        positionBefore!.collateral.toNumber() / 1_000_000,
         "USDC"
       );
       console.log(
@@ -702,8 +690,8 @@ describe("Full Flow Test", () => {
       );
 
       // Expected: price_pnl = 1_000_000 × (110_000_000 − 80_000_000) / 1_000_000 = +30_000_000 (+30 USDC)
-      const expectedPricePnl = positionBefore.positionSize
-        .mul(CLOSE_PRICE_WIN.sub(positionBefore.entryPrice))
+      const expectedPricePnl = positionBefore!.positionSize
+        .mul(CLOSE_PRICE_WIN.sub(positionBefore!.entryPrice))
         .div(new BN(1_000_000));
 
       const tx = await program.methods
@@ -720,13 +708,12 @@ describe("Full Flow Test", () => {
 
       console.log("✅ Position closed! TX:", tx);
 
-      // Assert position PDA is gone
-      try {
-        await program.account.position.fetch(positionPda);
-        assert.fail("Position PDA should be closed");
-      } catch {
-        console.log("✓ Position PDA closed (account not found as expected)");
-      }
+      // Assert position was removed from the inline list
+      assert.isUndefined(
+        await fetchSolPosition(),
+        "Position should be gone from user_account.positions"
+      );
+      console.log("✓ Position removed from user_account.positions");
 
       // Verify actual token transfers — profit should move from vault to user collateral
       const collateralAccountAfter = await getAccount(connection, userCollateralPda);
@@ -861,10 +848,11 @@ describe("Full Flow Test", () => {
         .rpc();
       console.log("Opened 5-SOL LONG at 5x leverage. TX:", tx);
 
-      const position = await program.account.position.fetch(positionPda);
+      const position = await fetchSolPosition();
+      assert.isDefined(position, "Position should exist");
       const expectedCollateral = 100_000_000; // $100 USDC in 6-decimal
       assert.equal(
-        position.collateral.toNumber(),
+        position!.collateral.toNumber(),
         expectedCollateral,
         "Collateral should be notional/leverage = $500/$5 = $100"
       );
@@ -882,7 +870,7 @@ describe("Full Flow Test", () => {
       );
 
       console.log("✓ Leveraged collateral calculation verified");
-      console.log("  Collateral locked: $" + position.collateral.toNumber() / 1_000_000);
+      console.log("  Collateral locked: $" + position!.collateral.toNumber() / 1_000_000);
       console.log("  OI (notional): $" + market.totalLongOi.toNumber() / 1_000_000);
 
       // Close the position for cleanup
@@ -898,28 +886,6 @@ describe("Full Flow Test", () => {
         })
         .rpc();
       console.log("✓ Position closed for cleanup");
-    });
-
-    it("should reject leverage exceeding market max", async () => {
-      console.log("\n🚀 Step 8b: Testing max leverage enforcement...");
-
-      const LEVERAGE_20X = new BN(20_000_000); // 20x — exceeds 10x max
-
-      try {
-        await program.methods
-          .openPosition(SOL_MINT, { long: {} }, POSITION_SIZE, LEVERAGE_20X)
-          .accounts({
-            user: wallet.publicKey,
-            markets: marketsPda,
-            oracle: oraclePda,
-            userCollateralTokenAccount: userCollateralPda,
-          })
-          .rpc();
-        assert.fail("Should have rejected leverage exceeding max");
-      } catch (error) {
-        console.log("✓ Correctly rejected 20x leverage (max is 10x)");
-        assert.include(error.toString(), "ExceedsMaxLeverage");
-      }
     });
 
     it("should amplify PnL with leverage", async () => {
@@ -949,7 +915,7 @@ describe("Full Flow Test", () => {
         .viewPositionPnl(SOL_MINT)
         .accounts({
           markets: marketsPda,
-          position: positionPda,
+          userAccount: userAccountPda,
           oracle: oraclePda,
         })
         .view();
@@ -958,9 +924,10 @@ describe("Full Flow Test", () => {
       const expectedPnl = 100_000_000; // $100 profit
       assert.equal(pricePnl, expectedPnl, "PnL should be $100 (5 SOL * $20 move)");
 
-      const position = await program.account.position.fetch(positionPda);
-      const returnPct = (pricePnl / position.collateral.toNumber()) * 100;
-      console.log("  Collateral: $" + position.collateral.toNumber() / 1_000_000);
+      const position = await fetchSolPosition();
+      assert.isDefined(position, "Position should exist");
+      const returnPct = (pricePnl / position!.collateral.toNumber()) * 100;
+      console.log("  Collateral: $" + position!.collateral.toNumber() / 1_000_000);
       console.log("  PnL: $" + pricePnl / 1_000_000);
       console.log("  Return: " + returnPct.toFixed(0) + "% (5x leveraged 20% price move)");
       assert.equal(returnPct, 100, "Return should be 100% (5x * 20%)");
@@ -1043,15 +1010,16 @@ describe("Full Flow Test", () => {
       assert.equal(vaultDelta.toString(), "100000000", "Vault should pay $100 profit");
 
       // Verify position was reset with new params
-      const position = await program.account.position.fetch(positionPda);
-      assert.isDefined(position.direction.long, "Direction should still be LONG");
+      const position = await fetchSolPosition();
+      assert.isDefined(position, "Position should exist after update");
+      assert.isDefined(position!.direction.long, "Direction should still be LONG");
       assert.equal(
-        position.positionSize.toString(),
+        position!.positionSize.toString(),
         NEW_SIZE.toString(),
         "Size should be updated to 3 SOL"
       );
       assert.equal(
-        position.entryPrice.toString(),
+        position!.entryPrice.toString(),
         UPDATE_PRICE.toString(),
         "Entry price should be reset to current oracle price ($120)"
       );
@@ -1059,7 +1027,7 @@ describe("Full Flow Test", () => {
       // New collateral: 3 SOL * $120 / 5x = $72
       const expectedNewCollateral = 72_000_000;
       assert.equal(
-        position.collateral.toNumber(),
+        position!.collateral.toNumber(),
         expectedNewCollateral,
         "Collateral should be recalculated for new position"
       );
@@ -1153,15 +1121,16 @@ describe("Full Flow Test", () => {
       assert.equal(vaultDelta.toString(), "20000000", "Vault should gain $20");
 
       // Verify position is now SHORT
-      const position = await program.account.position.fetch(positionPda);
-      assert.isDefined(position.direction.short, "Direction should be SHORT");
+      const position = await fetchSolPosition();
+      assert.isDefined(position, "Position should exist after flip");
+      assert.isDefined(position!.direction.short, "Direction should be SHORT");
       assert.equal(
-        position.positionSize.toString(),
+        position!.positionSize.toString(),
         SIZE_4SOL.toString(),
         "Size should be 4 SOL"
       );
       assert.equal(
-        position.entryPrice.toString(),
+        position!.entryPrice.toString(),
         FLIP_PRICE.toString(),
         "Entry price should be $90"
       );
@@ -1213,11 +1182,8 @@ describe("Full Flow Test", () => {
       const userAccount = await program.account.userAccount.fetch(
         userAccountPda
       );
-      console.log(
-        "✓ User locked collateral:",
-        userAccount.lockedCollateral.toNumber() / 1_000_000,
-        "USDC"
-      );
+      console.log("✓ User account authority:", userAccount.authority.toBase58());
+      console.log("✓ Open positions:", userAccount.positions.length);
 
       // Check user collateral token account
       const collateralAccount = await getAccount(connection, userCollateralPda);
@@ -1235,16 +1201,18 @@ describe("Full Flow Test", () => {
         "USDC"
       );
 
-      // Check Position — should be closed after Step 6
-      try {
-        const position = await program.account.position.fetch(positionPda);
+      // Check Position — should be absent after Step 9 cleanup
+      const solPos = userAccount.positions.find(
+        (p) => p.perpsMarket.toString() === SOL_MINT.toString()
+      );
+      if (solPos) {
         console.log(
-          "✓ Position size:",
-          position.positionSize.toNumber() / 1_000_000,
+          "✓ SOL position size:",
+          solPos.positionSize.toNumber() / 1_000_000,
           "SOL (token quantity)"
         );
-      } catch {
-        console.log("✓ Position PDA already closed (expected after Step 6)");
+      } else {
+        console.log("✓ No open SOL position (expected after cleanup)");
       }
 
       console.log("\n✅ All verifications passed!");

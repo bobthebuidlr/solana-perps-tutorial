@@ -1,7 +1,10 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
-use crate::{constants::*, error::ErrorCode, Markets, Oracle, PerpsMarket, Position, PositionDirection};
+use crate::{
+    constants::*, error::ErrorCode, Markets, Oracle, PerpsMarket, Position, PositionDirection,
+    UserAccount,
+};
 
 /// Returns price-based PnL in USDC base units (6-decimal).
 pub fn calculate_price_pnl(position: &Position, current_price: u64) -> Result<i64> {
@@ -35,6 +38,31 @@ pub fn calculate_price_pnl(position: &Position, current_price: u64) -> Result<i6
 /// Computes notional value at a given price: position_size * price / 10^6.
 pub fn position_notional_at_price(position: &Position, price: u64) -> Result<u64> {
     calculate_notional(position.position_size, price)
+}
+
+/// Reverts if the user's post-trade equity is below maintenance margin.
+/// Reads the authoritative position list directly from `user_account.positions`,
+/// so callers must have already mutated the positions vec to reflect the
+/// post-trade state before calling this.
+///
+/// @param user_account User account holding the full inline position list
+/// @param markets Markets account
+/// @param oracle Oracle account
+/// @param token_balance User's post-trade collateral token balance
+/// @return Result<()> — Err(BelowMaintenanceMargin) if unhealthy
+pub fn check_user_account_health(
+    user_account: &UserAccount,
+    markets: &Markets,
+    oracle: &Oracle,
+    token_balance: u64,
+) -> Result<()> {
+    let (equity, maintenance) =
+        calculate_account_health(&user_account.positions, markets, oracle, token_balance)?;
+    require!(
+        equity >= maintenance as i64,
+        ErrorCode::BelowMaintenanceMargin
+    );
+    Ok(())
 }
 
 /// Returns (total_equity, total_maintenance_margin) across all open positions.
@@ -210,7 +238,6 @@ pub fn calculate_current_funding_indices(
 }
 
 /// Calculates funding PnL using the cumulative index approach.
-/// Uses entry notional (not collateral) so funding scales with leverage.
 ///
 /// The two cumulative indices move in opposite directions (long += delta, short -= delta),
 /// so the same negation formula works for both sides:
@@ -310,7 +337,6 @@ pub fn remove_open_interest(
 }
 
 /// Settles PnL between user collateral and vault via token transfers.
-/// Losses transfer from user collateral to vault, profits from vault to user collateral.
 pub fn settle_pnl<'info>(
     total_pnl: i64,
     max_loss: u64,
@@ -320,6 +346,7 @@ pub fn settle_pnl<'info>(
     collateral_signer_seeds: &[&[&[u8]]],
     vault_signer_seeds: &[&[&[u8]]],
 ) -> Result<()> {
+    // User has losses: Transfer money from user's collateral account to the vault
     if total_pnl < 0 {
         // Cap loss at position collateral and available balance
         let abs_loss = total_pnl.unsigned_abs();
@@ -338,6 +365,8 @@ pub fn settle_pnl<'info>(
             );
             token::transfer(cpi_ctx, loss_amount)?;
         }
+
+    // User has profits: Send money from the vault to user's collateral account
     } else if total_pnl > 0 {
         let profit_amount = total_pnl as u64;
         require!(
@@ -350,11 +379,8 @@ pub fn settle_pnl<'info>(
             to: user_collateral.to_account_info(),
             authority: vault.to_account_info(),
         };
-        let cpi_ctx = CpiContext::new_with_signer(
-            token_program.key(),
-            cpi_accounts,
-            vault_signer_seeds,
-        );
+        let cpi_ctx =
+            CpiContext::new_with_signer(token_program.key(), cpi_accounts, vault_signer_seeds);
         token::transfer(cpi_ctx, profit_amount)?;
     }
 

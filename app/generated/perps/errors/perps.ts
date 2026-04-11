@@ -14,69 +14,39 @@ import {
 } from "@solana/kit";
 import { PERPS_PROGRAM_ADDRESS } from "../programs";
 
-/** CustomError: Custom error message */
-export const PERPS_ERROR__CUSTOM_ERROR = 0x1770; // 6000
 /** InvalidAmount: Invalid amount */
-export const PERPS_ERROR__INVALID_AMOUNT = 0x1771; // 6001
+export const PERPS_ERROR__INVALID_AMOUNT = 0x1770; // 6000
 /** ArithmeticOverflow: Arithmetic overflow */
-export const PERPS_ERROR__ARITHMETIC_OVERFLOW = 0x1772; // 6002
-/** OraclePriceMismatch: Oracle price data is invalid or corrupted */
-export const PERPS_ERROR__ORACLE_PRICE_MISMATCH = 0x1773; // 6003
-/** InvalidCollateralState: Available collateral is less than locked collateral */
-export const PERPS_ERROR__INVALID_COLLATERAL_STATE = 0x1774; // 6004
+export const PERPS_ERROR__ARITHMETIC_OVERFLOW = 0x1771; // 6001
 /** InsufficientCollateral: Insufficient collateral to perform this operation */
-export const PERPS_ERROR__INSUFFICIENT_COLLATERAL = 0x1775; // 6005
-/** InvalidPositionDirection: Invalid position direction specified */
-export const PERPS_ERROR__INVALID_POSITION_DIRECTION = 0x1776; // 6006
-/** OracleStale: Oracle price is stale or outdated */
-export const PERPS_ERROR__ORACLE_STALE = 0x1777; // 6007
-/** FundingNotDue: Funding rate update not due yet */
-export const PERPS_ERROR__FUNDING_NOT_DUE = 0x1778; // 6008
-/** InvalidPositionSize: Position size must be greater than zero */
-export const PERPS_ERROR__INVALID_POSITION_SIZE = 0x1779; // 6009
-/** PositionNotFound: Position not found or already closed */
-export const PERPS_ERROR__POSITION_NOT_FOUND = 0x177a; // 6010
-/** MarketAlreadyInitialized: Market has already been initialized */
-export const PERPS_ERROR__MARKET_ALREADY_INITIALIZED = 0x177b; // 6011
+export const PERPS_ERROR__INSUFFICIENT_COLLATERAL = 0x1772; // 6002
 /** UnauthorizedAccess: Unauthorized: you do not have permission for this action */
-export const PERPS_ERROR__UNAUTHORIZED_ACCESS = 0x177c; // 6012
-/** CollateralLocked: Cannot withdraw locked collateral */
-export const PERPS_ERROR__COLLATERAL_LOCKED = 0x177d; // 6013
-/** OraclePriceOutOfBounds: Oracle price is outside acceptable bounds */
-export const PERPS_ERROR__ORACLE_PRICE_OUT_OF_BOUNDS = 0x177e; // 6014
-/** OraclePriceChangeExcessive: Oracle price change exceeds maximum allowed percentage */
-export const PERPS_ERROR__ORACLE_PRICE_CHANGE_EXCESSIVE = 0x177f; // 6015
+export const PERPS_ERROR__UNAUTHORIZED_ACCESS = 0x1773; // 6003
 /** OraclePriceNotFound: Oracle price not found */
-export const PERPS_ERROR__ORACLE_PRICE_NOT_FOUND = 0x1780; // 6016
+export const PERPS_ERROR__ORACLE_PRICE_NOT_FOUND = 0x1774; // 6004
 /** MarketNotFound: Market not found */
-export const PERPS_ERROR__MARKET_NOT_FOUND = 0x1781; // 6017
+export const PERPS_ERROR__MARKET_NOT_FOUND = 0x1775; // 6005
 /** InsufficientVaultFunds: Vault has insufficient funds to pay settlement */
-export const PERPS_ERROR__INSUFFICIENT_VAULT_FUNDS = 0x1782; // 6018
-/** ExceedsMaxLeverage: Leverage exceeds maximum allowed for this market */
-export const PERPS_ERROR__EXCEEDS_MAX_LEVERAGE = 0x1783; // 6019
-/** BelowMaintenanceMargin: Withdrawal would put account below maintenance margin */
-export const PERPS_ERROR__BELOW_MAINTENANCE_MARGIN = 0x1784; // 6020
+export const PERPS_ERROR__INSUFFICIENT_VAULT_FUNDS = 0x1776; // 6006
+/** BelowMaintenanceMargin: Operation would put account below maintenance margin */
+export const PERPS_ERROR__BELOW_MAINTENANCE_MARGIN = 0x1777; // 6007
+/** PositionNotFound: No open position found for this market */
+export const PERPS_ERROR__POSITION_NOT_FOUND = 0x1778; // 6008
+/** MarketAlreadyHasPosition: User already has an open position on this market */
+export const PERPS_ERROR__MARKET_ALREADY_HAS_POSITION = 0x1779; // 6009
+/** MaxPositionsReached: User has reached the maximum number of open positions */
+export const PERPS_ERROR__MAX_POSITIONS_REACHED = 0x177a; // 6010
 
 export type PerpsError =
   | typeof PERPS_ERROR__ARITHMETIC_OVERFLOW
   | typeof PERPS_ERROR__BELOW_MAINTENANCE_MARGIN
-  | typeof PERPS_ERROR__COLLATERAL_LOCKED
-  | typeof PERPS_ERROR__CUSTOM_ERROR
-  | typeof PERPS_ERROR__EXCEEDS_MAX_LEVERAGE
-  | typeof PERPS_ERROR__FUNDING_NOT_DUE
   | typeof PERPS_ERROR__INSUFFICIENT_COLLATERAL
   | typeof PERPS_ERROR__INSUFFICIENT_VAULT_FUNDS
   | typeof PERPS_ERROR__INVALID_AMOUNT
-  | typeof PERPS_ERROR__INVALID_COLLATERAL_STATE
-  | typeof PERPS_ERROR__INVALID_POSITION_DIRECTION
-  | typeof PERPS_ERROR__INVALID_POSITION_SIZE
-  | typeof PERPS_ERROR__MARKET_ALREADY_INITIALIZED
+  | typeof PERPS_ERROR__MARKET_ALREADY_HAS_POSITION
   | typeof PERPS_ERROR__MARKET_NOT_FOUND
-  | typeof PERPS_ERROR__ORACLE_PRICE_CHANGE_EXCESSIVE
-  | typeof PERPS_ERROR__ORACLE_PRICE_MISMATCH
+  | typeof PERPS_ERROR__MAX_POSITIONS_REACHED
   | typeof PERPS_ERROR__ORACLE_PRICE_NOT_FOUND
-  | typeof PERPS_ERROR__ORACLE_PRICE_OUT_OF_BOUNDS
-  | typeof PERPS_ERROR__ORACLE_STALE
   | typeof PERPS_ERROR__POSITION_NOT_FOUND
   | typeof PERPS_ERROR__UNAUTHORIZED_ACCESS;
 
@@ -84,25 +54,15 @@ let perpsErrorMessages: Record<PerpsError, string> | undefined;
 if (process.env.NODE_ENV !== "production") {
   perpsErrorMessages = {
     [PERPS_ERROR__ARITHMETIC_OVERFLOW]: `Arithmetic overflow`,
-    [PERPS_ERROR__BELOW_MAINTENANCE_MARGIN]: `Withdrawal would put account below maintenance margin`,
-    [PERPS_ERROR__COLLATERAL_LOCKED]: `Cannot withdraw locked collateral`,
-    [PERPS_ERROR__CUSTOM_ERROR]: `Custom error message`,
-    [PERPS_ERROR__EXCEEDS_MAX_LEVERAGE]: `Leverage exceeds maximum allowed for this market`,
-    [PERPS_ERROR__FUNDING_NOT_DUE]: `Funding rate update not due yet`,
+    [PERPS_ERROR__BELOW_MAINTENANCE_MARGIN]: `Operation would put account below maintenance margin`,
     [PERPS_ERROR__INSUFFICIENT_COLLATERAL]: `Insufficient collateral to perform this operation`,
     [PERPS_ERROR__INSUFFICIENT_VAULT_FUNDS]: `Vault has insufficient funds to pay settlement`,
     [PERPS_ERROR__INVALID_AMOUNT]: `Invalid amount`,
-    [PERPS_ERROR__INVALID_COLLATERAL_STATE]: `Available collateral is less than locked collateral`,
-    [PERPS_ERROR__INVALID_POSITION_DIRECTION]: `Invalid position direction specified`,
-    [PERPS_ERROR__INVALID_POSITION_SIZE]: `Position size must be greater than zero`,
-    [PERPS_ERROR__MARKET_ALREADY_INITIALIZED]: `Market has already been initialized`,
+    [PERPS_ERROR__MARKET_ALREADY_HAS_POSITION]: `User already has an open position on this market`,
     [PERPS_ERROR__MARKET_NOT_FOUND]: `Market not found`,
-    [PERPS_ERROR__ORACLE_PRICE_CHANGE_EXCESSIVE]: `Oracle price change exceeds maximum allowed percentage`,
-    [PERPS_ERROR__ORACLE_PRICE_MISMATCH]: `Oracle price data is invalid or corrupted`,
+    [PERPS_ERROR__MAX_POSITIONS_REACHED]: `User has reached the maximum number of open positions`,
     [PERPS_ERROR__ORACLE_PRICE_NOT_FOUND]: `Oracle price not found`,
-    [PERPS_ERROR__ORACLE_PRICE_OUT_OF_BOUNDS]: `Oracle price is outside acceptable bounds`,
-    [PERPS_ERROR__ORACLE_STALE]: `Oracle price is stale or outdated`,
-    [PERPS_ERROR__POSITION_NOT_FOUND]: `Position not found or already closed`,
+    [PERPS_ERROR__POSITION_NOT_FOUND]: `No open position found for this market`,
     [PERPS_ERROR__UNAUTHORIZED_ACCESS]: `Unauthorized: you do not have permission for this action`,
   };
 }

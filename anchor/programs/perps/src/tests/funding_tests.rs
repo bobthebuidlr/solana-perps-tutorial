@@ -1,9 +1,8 @@
 use anchor_lang::prelude::Pubkey;
 
 use crate::{
-    calculate_funding_pnl, calculate_funding_rate,
-    constants::MAX_FUNDING_RATE,
-    PerpsMarket, Position, PositionDirection,
+    calculate_funding_pnl, calculate_funding_rate, constants::MAX_FUNDING_RATE, PerpsMarket,
+    Position, PositionDirection,
 };
 
 fn make_market(
@@ -33,15 +32,12 @@ fn make_position(
     entry_funding_index: i128,
 ) -> Position {
     Position {
-        user_account: Pubkey::default(),
         perps_market: Pubkey::default(),
         direction,
         entry_price,
         position_size,
         collateral,
         entry_funding_index,
-        opened_at: 0,
-        bump: 0,
     }
 }
 
@@ -198,7 +194,11 @@ fn funding_scales_with_leverage() {
     let pnl_1x = calculate_funding_pnl(&pos_1x, &market, None).unwrap();
     let pnl_10x = calculate_funding_pnl(&pos_10x, &market, None).unwrap();
 
-    assert_eq!(pnl_10x, pnl_1x * 10, "10x leveraged position should pay 10x more funding");
+    assert_eq!(
+        pnl_10x,
+        pnl_1x * 10,
+        "10x leveraged position should pay 10x more funding"
+    );
 }
 
 // ── Zero funding when balanced ──

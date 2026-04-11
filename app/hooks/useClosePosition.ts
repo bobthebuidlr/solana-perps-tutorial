@@ -5,11 +5,7 @@ import { useCallback, useState } from "react";
 import { PERPS_PROGRAM_ADDRESS } from "../generated/perps";
 import { getClosePositionInstructionDataEncoder } from "../generated/perps/instructions/closePosition";
 import { TOKEN_PROGRAM_ADDRESS } from "../lib/constants";
-import {
-  derivePositionPda,
-  deriveUserCollateralPda,
-  deriveVaultPda,
-} from "../lib/pdas";
+import { deriveUserCollateralPda, deriveVaultPda } from "../lib/pdas";
 import {
   useConfigPda,
   useMarketsPda,
@@ -71,7 +67,6 @@ export function useClosePosition() {
 
       setIsLoading(true);
       try {
-        const positionAddress = await derivePositionPda(user, tokenMint);
         const userCollateralAddress = await deriveUserCollateralPda(user);
         const vaultAddress = await deriveVaultPda();
 
@@ -80,7 +75,6 @@ export function useClosePosition() {
           accounts: [
             { address: user, role: 3 }, // user (WritableSigner)
             { address: userAccount, role: 1 }, // userAccount (Writable)
-            { address: positionAddress, role: 1 }, // position (Writable)
             { address: markets, role: 1 }, // markets (Writable)
             { address: oracle, role: 0 }, // oracle (Readonly)
             { address: config, role: 0 }, // config (Readonly)

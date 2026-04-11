@@ -15,6 +15,8 @@ pub struct InitializeMarketWithOracle<'info> {
 }
 
 /// Creates a new perpetual market with an initial oracle price.
+/// Normally it would refer to a third party oracle, but for this demo
+/// we're using a mock oracle.
 pub fn handler(
     ctx: Context<InitializeMarketWithOracle>,
     token: Pubkey,

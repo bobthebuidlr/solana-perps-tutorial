@@ -44,7 +44,7 @@ export function getViewPositionPnlDiscriminatorBytes() {
 export type ViewPositionPnlInstruction<
   TProgram extends string = typeof PERPS_PROGRAM_ADDRESS,
   TAccountMarkets extends string | AccountMeta<string> = string,
-  TAccountPosition extends string | AccountMeta<string> = string,
+  TAccountUserAccount extends string | AccountMeta<string> = string,
   TAccountOracle extends string | AccountMeta<string> = string,
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
@@ -54,9 +54,9 @@ export type ViewPositionPnlInstruction<
       TAccountMarkets extends string
         ? ReadonlyAccount<TAccountMarkets>
         : TAccountMarkets,
-      TAccountPosition extends string
-        ? ReadonlyAccount<TAccountPosition>
-        : TAccountPosition,
+      TAccountUserAccount extends string
+        ? ReadonlyAccount<TAccountUserAccount>
+        : TAccountUserAccount,
       TAccountOracle extends string
         ? ReadonlyAccount<TAccountOracle>
         : TAccountOracle,
@@ -100,31 +100,31 @@ export function getViewPositionPnlInstructionDataCodec(): FixedSizeCodec<
 
 export type ViewPositionPnlInput<
   TAccountMarkets extends string = string,
-  TAccountPosition extends string = string,
+  TAccountUserAccount extends string = string,
   TAccountOracle extends string = string,
 > = {
   markets: Address<TAccountMarkets>;
-  position: Address<TAccountPosition>;
+  userAccount: Address<TAccountUserAccount>;
   oracle: Address<TAccountOracle>;
   tokenMint: ViewPositionPnlInstructionDataArgs["tokenMint"];
 };
 
 export function getViewPositionPnlInstruction<
   TAccountMarkets extends string,
-  TAccountPosition extends string,
+  TAccountUserAccount extends string,
   TAccountOracle extends string,
   TProgramAddress extends Address = typeof PERPS_PROGRAM_ADDRESS,
 >(
   input: ViewPositionPnlInput<
     TAccountMarkets,
-    TAccountPosition,
+    TAccountUserAccount,
     TAccountOracle
   >,
   config?: { programAddress?: TProgramAddress },
 ): ViewPositionPnlInstruction<
   TProgramAddress,
   TAccountMarkets,
-  TAccountPosition,
+  TAccountUserAccount,
   TAccountOracle
 > {
   // Program address.
@@ -133,7 +133,7 @@ export function getViewPositionPnlInstruction<
   // Original accounts.
   const originalAccounts = {
     markets: { value: input.markets ?? null, isWritable: false },
-    position: { value: input.position ?? null, isWritable: false },
+    userAccount: { value: input.userAccount ?? null, isWritable: false },
     oracle: { value: input.oracle ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
@@ -148,7 +148,7 @@ export function getViewPositionPnlInstruction<
   return Object.freeze({
     accounts: [
       getAccountMeta(accounts.markets),
-      getAccountMeta(accounts.position),
+      getAccountMeta(accounts.userAccount),
       getAccountMeta(accounts.oracle),
     ],
     data: getViewPositionPnlInstructionDataEncoder().encode(
@@ -158,7 +158,7 @@ export function getViewPositionPnlInstruction<
   } as ViewPositionPnlInstruction<
     TProgramAddress,
     TAccountMarkets,
-    TAccountPosition,
+    TAccountUserAccount,
     TAccountOracle
   >);
 }
@@ -170,7 +170,7 @@ export type ParsedViewPositionPnlInstruction<
   programAddress: Address<TProgram>;
   accounts: {
     markets: TAccountMetas[0];
-    position: TAccountMetas[1];
+    userAccount: TAccountMetas[1];
     oracle: TAccountMetas[2];
   };
   data: ViewPositionPnlInstructionData;
@@ -198,7 +198,7 @@ export function parseViewPositionPnlInstruction<
     programAddress: instruction.programAddress,
     accounts: {
       markets: getNextAccount(),
-      position: getNextAccount(),
+      userAccount: getNextAccount(),
       oracle: getNextAccount(),
     },
     data: getViewPositionPnlInstructionDataDecoder().decode(instruction.data),

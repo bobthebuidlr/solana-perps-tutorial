@@ -2,7 +2,7 @@
 
 import { type Address } from "@solana/kit";
 import { useWalletConnection } from "@solana/react-hooks";
-import { type Position } from "../generated/perps/accounts/position";
+import { type Position } from "../generated/perps/types/position";
 import { type PerpsMarket } from "../generated/perps/types/perpsMarket";
 import { PositionDirection } from "../generated/perps/types/positionDirection";
 import { useClosePosition } from "../hooks/useClosePosition";

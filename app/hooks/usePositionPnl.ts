@@ -13,8 +13,7 @@ import { useSolanaClient, useWalletConnection } from "@solana/react-hooks";
 import { getViewPositionPnlInstruction } from "../generated/perps/instructions/viewPositionPnl";
 import { type PnlInfo } from "../generated/perps/types/pnlInfo";
 import { getPositionInfoDecoder } from "../generated/perps/types/positionInfo";
-import { derivePositionPda } from "../lib/pdas";
-import { useMarketsPda, useOraclePda } from "./usePdas";
+import { useMarketsPda, useOraclePda, useUserAccountPda } from "./usePdas";
 
 /**
  * Fetches the PnL breakdown for a single position by simulating the
@@ -34,21 +33,27 @@ export function usePositionPnl(tokenMint: Address | null) {
   const oracleAddress = useOraclePda();
 
   const walletAddress = wallet?.account.address;
+  const userAccountAddress = useUserAccountPda(walletAddress);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["positionPnl", tokenMint ?? "none"],
     queryFn: async (): Promise<PnlInfo | null> => {
-      if (!walletAddress || !tokenMint || !client?.runtime?.rpc || !marketsAddress || !oracleAddress) {
+      if (
+        !walletAddress ||
+        !tokenMint ||
+        !client?.runtime?.rpc ||
+        !marketsAddress ||
+        !oracleAddress ||
+        !userAccountAddress
+      ) {
         return null;
       }
 
-      // Derive position PDA (unique per user + market token mint)
-      const positionAddress = await derivePositionPda(walletAddress, tokenMint);
-
-      // Build the read-only view instruction
+      // Build the read-only view instruction — reads the caller's inline
+      // position list from their UserAccount.
       const instruction = getViewPositionPnlInstruction({
         markets: marketsAddress,
-        position: positionAddress,
+        userAccount: userAccountAddress,
         oracle: oracleAddress,
         tokenMint,
       });
@@ -105,7 +110,13 @@ export function usePositionPnl(tokenMint: Address | null) {
       const [positionInfo] = getPositionInfoDecoder().read(bytes, 0);
       return positionInfo.pnlInfo;
     },
-    enabled: !!walletAddress && !!tokenMint && !!client?.runtime?.rpc && !!marketsAddress && !!oracleAddress,
+    enabled:
+      !!walletAddress &&
+      !!tokenMint &&
+      !!client?.runtime?.rpc &&
+      !!marketsAddress &&
+      !!oracleAddress &&
+      !!userAccountAddress,
     refetchInterval: 5000,
   });
 

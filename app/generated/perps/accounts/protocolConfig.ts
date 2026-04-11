@@ -49,18 +49,11 @@ export function getProtocolConfigDiscriminatorBytes() {
 
 export type ProtocolConfig = {
   discriminator: ReadonlyUint8Array;
-  /** The accepted USDC mint for all collateral and vault operations */
   usdcMint: Address;
-  /** PDA bump seed */
   bump: number;
 };
 
-export type ProtocolConfigArgs = {
-  /** The accepted USDC mint for all collateral and vault operations */
-  usdcMint: Address;
-  /** PDA bump seed */
-  bump: number;
-};
+export type ProtocolConfigArgs = { usdcMint: Address; bump: number };
 
 /** Gets the encoder for {@link ProtocolConfigArgs} account data. */
 export function getProtocolConfigEncoder(): FixedSizeEncoder<ProtocolConfigArgs> {

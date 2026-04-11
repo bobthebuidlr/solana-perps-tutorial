@@ -2,23 +2,36 @@ use anchor_lang::prelude::*;
 
 use crate::{
     calculate_funding_pnl, calculate_price_pnl, error::ErrorCode, Markets, Oracle, PnlInfo,
-    Position, PositionInfo,
+    PositionInfo, UserAccount,
 };
 
 #[derive(Accounts)]
 pub struct ViewPositionPnl<'info> {
     pub markets: Account<'info, Markets>,
-    pub position: Account<'info, Position>,
+    pub user_account: Account<'info, UserAccount>,
     pub oracle: Account<'info, Oracle>,
 }
 
-/// Returns position info with current price and funding PnL.
+/// Returns position info with current price and funding PnL for the user's
+/// inline position on `token_mint`.
+///
+/// @param ctx ViewPositionPnl accounts context
+/// @param token_mint Market token mint identifying which position to read
+/// @return PositionInfo for the requested position
 pub fn handler(ctx: Context<ViewPositionPnl>, token_mint: Pubkey) -> Result<PositionInfo> {
-    let position = &ctx.accounts.position;
-    let oracle = &ctx.accounts.oracle;
     let clock = Clock::get()?;
 
-    let oracle_price = oracle
+    let position = ctx
+        .accounts
+        .user_account
+        .positions
+        .iter()
+        .find(|p| p.perps_market == token_mint)
+        .ok_or(error!(ErrorCode::PositionNotFound))?;
+
+    let oracle_price = ctx
+        .accounts
+        .oracle
         .prices
         .iter()
         .find(|p| p.token_mint == token_mint)

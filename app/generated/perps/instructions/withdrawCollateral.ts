@@ -140,19 +140,12 @@ export type WithdrawCollateralAsyncInput<
   TAccountOracle extends string = string,
   TAccountTokenProgram extends string = string,
 > = {
-  /** User withdrawing collateral */
   user: TransactionSigner<TAccountUser>;
-  /** User collateral account */
   userAccount?: Address<TAccountUserAccount>;
-  /** Protocol config — validates accepted USDC mint */
   config?: Address<TAccountConfig>;
-  /** Per-user collateral token account PDA — signs outbound transfers */
   userCollateralTokenAccount?: Address<TAccountUserCollateralTokenAccount>;
-  /** User's USDC token account to receive the withdrawn collateral */
   userTokenAccount: Address<TAccountUserTokenAccount>;
-  /** Markets account — needed for maintenance margin ratios */
   markets: Address<TAccountMarkets>;
-  /** Oracle account — needed for current prices */
   oracle: Address<TAccountOracle>;
   tokenProgram?: Address<TAccountTokenProgram>;
   amount: WithdrawCollateralInstructionDataArgs["amount"];
@@ -297,19 +290,12 @@ export type WithdrawCollateralInput<
   TAccountOracle extends string = string,
   TAccountTokenProgram extends string = string,
 > = {
-  /** User withdrawing collateral */
   user: TransactionSigner<TAccountUser>;
-  /** User collateral account */
   userAccount: Address<TAccountUserAccount>;
-  /** Protocol config — validates accepted USDC mint */
   config: Address<TAccountConfig>;
-  /** Per-user collateral token account PDA — signs outbound transfers */
   userCollateralTokenAccount: Address<TAccountUserCollateralTokenAccount>;
-  /** User's USDC token account to receive the withdrawn collateral */
   userTokenAccount: Address<TAccountUserTokenAccount>;
-  /** Markets account — needed for maintenance margin ratios */
   markets: Address<TAccountMarkets>;
-  /** Oracle account — needed for current prices */
   oracle: Address<TAccountOracle>;
   tokenProgram?: Address<TAccountTokenProgram>;
   amount: WithdrawCollateralInstructionDataArgs["amount"];
@@ -417,19 +403,12 @@ export type ParsedWithdrawCollateralInstruction<
 > = {
   programAddress: Address<TProgram>;
   accounts: {
-    /** User withdrawing collateral */
     user: TAccountMetas[0];
-    /** User collateral account */
     userAccount: TAccountMetas[1];
-    /** Protocol config — validates accepted USDC mint */
     config: TAccountMetas[2];
-    /** Per-user collateral token account PDA — signs outbound transfers */
     userCollateralTokenAccount: TAccountMetas[3];
-    /** User's USDC token account to receive the withdrawn collateral */
     userTokenAccount: TAccountMetas[4];
-    /** Markets account — needed for maintenance margin ratios */
     markets: TAccountMetas[5];
-    /** Oracle account — needed for current prices */
     oracle: TAccountMetas[6];
     tokenProgram: TAccountMetas[7];
   };

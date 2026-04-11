@@ -5,8 +5,7 @@ import { useCallback, useState } from "react";
 import { PERPS_PROGRAM_ADDRESS } from "../generated/perps";
 import { getOpenPositionInstructionDataEncoder } from "../generated/perps/instructions/openPosition";
 import { PositionDirection } from "../generated/perps/types/positionDirection";
-import { SYSTEM_PROGRAM_ADDRESS } from "../lib/constants";
-import { derivePositionPda, deriveUserCollateralPda } from "../lib/pdas";
+import { deriveUserCollateralPda } from "../lib/pdas";
 import { useMarketsPda, useOraclePda, useUserAccountPda } from "./usePdas";
 
 /**
@@ -54,8 +53,6 @@ export function useOpenPosition() {
       setError(null);
 
       try {
-        // Derive position PDA and user collateral PDA
-        const positionAddress = await derivePositionPda(walletAddress, tokenMint);
         const userCollateralAddress = await deriveUserCollateralPda(walletAddress);
 
         const instruction = {
@@ -63,11 +60,9 @@ export function useOpenPosition() {
           accounts: [
             { address: walletAddress, role: 3 },              // user (WritableSigner)
             { address: userAccountAddress, role: 1 },         // userAccount (Writable)
-            { address: positionAddress, role: 1 },            // position (Writable)
             { address: marketsAddress, role: 1 },             // markets (Writable)
             { address: oracleAddress, role: 0 },              // oracle (Readonly)
             { address: userCollateralAddress, role: 0 },      // userCollateralTokenAccount (Readonly)
-            { address: SYSTEM_PROGRAM_ADDRESS, role: 0 },     // systemProgram (Readonly)
           ],
           data: getOpenPositionInstructionDataEncoder().encode({
             tokenMint,

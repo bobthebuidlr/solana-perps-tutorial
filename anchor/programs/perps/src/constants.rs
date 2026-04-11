@@ -10,9 +10,6 @@ pub const ORACLE_SEED: &[u8] = b"oracle";
 pub const USER_SEED: &[u8] = b"user";
 
 #[constant]
-pub const POSITION_SEED: &[u8] = b"position";
-
-#[constant]
 pub const VAULT_SEED: &[u8] = b"vault";
 
 #[constant]
@@ -24,6 +21,9 @@ pub const CONFIG_SEED: &[u8] = b"config";
 pub const ANCHOR_DISCRIMINATOR: usize = 8;
 
 pub const MAX_MARKETS: usize = 10;
+
+// One position per market per user, so this matches MAX_MARKETS.
+pub const MAX_POSITIONS: usize = 10;
 
 // Funding rate parameters
 // Rate is based on OI imbalance: rate = (long_oi - short_oi) / total_oi * MAX_FUNDING_RATE

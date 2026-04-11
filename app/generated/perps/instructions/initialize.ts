@@ -128,7 +128,6 @@ export type InitializeAsyncInput<
   authority: TransactionSigner<TAccountAuthority>;
   markets?: Address<TAccountMarkets>;
   oracle?: Address<TAccountOracle>;
-  /** Protocol config — stores the accepted USDC mint */
   config?: Address<TAccountConfig>;
   vault?: Address<TAccountVault>;
   usdcMint: Address<TAccountUsdcMint>;
@@ -274,7 +273,6 @@ export type InitializeInput<
   authority: TransactionSigner<TAccountAuthority>;
   markets: Address<TAccountMarkets>;
   oracle: Address<TAccountOracle>;
-  /** Protocol config — stores the accepted USDC mint */
   config: Address<TAccountConfig>;
   vault: Address<TAccountVault>;
   usdcMint: Address<TAccountUsdcMint>;
@@ -380,7 +378,6 @@ export type ParsedInitializeInstruction<
     authority: TAccountMetas[0];
     markets: TAccountMetas[1];
     oracle: TAccountMetas[2];
-    /** Protocol config — stores the accepted USDC mint */
     config: TAccountMetas[3];
     vault: TAccountMetas[4];
     usdcMint: TAccountMetas[5];

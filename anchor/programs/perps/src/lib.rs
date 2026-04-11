@@ -32,19 +32,34 @@ pub mod perps {
         max_leverage: u64,
         maintenance_margin_ratio: u64,
     ) -> Result<()> {
-        initialize_market_with_oracle::handler(ctx, token, name, price, max_leverage, maintenance_margin_ratio)
+        initialize_market_with_oracle::handler(
+            ctx,
+            token,
+            name,
+            price,
+            max_leverage,
+            maintenance_margin_ratio,
+        )
     }
 
     pub fn update_oracle(ctx: Context<UpdateOracle>, token: Pubkey, new_price: u64) -> Result<()> {
         update_oracle::handler(ctx, token, new_price)
     }
 
+    pub fn update_funding(ctx: Context<UpdateFunding>) -> Result<()> {
+        update_funding::handler(ctx)
+    }
+
     pub fn deposit_collateral(ctx: Context<DepositCollateral>, amount: u64) -> Result<()> {
         deposit_collateral::handler(ctx, amount)
     }
 
-    pub fn open_position<'info>(
-        ctx: Context<'_, '_, 'info, 'info, OpenPosition<'info>>,
+    pub fn withdraw_collateral(ctx: Context<WithdrawCollateral>, amount: u64) -> Result<()> {
+        withdraw_collateral::handler(ctx, amount)
+    }
+
+    pub fn open_position(
+        ctx: Context<OpenPosition>,
         token_mint: Pubkey,
         direction: PositionDirection,
         amount: u64,
@@ -53,23 +68,8 @@ pub mod perps {
         open_position::handler(ctx, token_mint, direction, amount, leverage)
     }
 
-    pub fn view_position_pnl(
-        ctx: Context<ViewPositionPnl>,
-        token_mint: Pubkey,
-    ) -> Result<PositionInfo> {
-        view_position_pnl::handler(ctx, token_mint)
-    }
-
-    pub fn update_funding(ctx: Context<UpdateFunding>) -> Result<()> {
-        update_funding::handler(ctx)
-    }
-
-    pub fn close_position(ctx: Context<ClosePosition>, token_mint: Pubkey) -> Result<()> {
-        close_position::handler(ctx, token_mint)
-    }
-
-    pub fn update_position<'info>(
-        ctx: Context<'_, '_, 'info, 'info, UpdatePosition<'info>>,
+    pub fn update_position(
+        ctx: Context<UpdatePosition>,
         token_mint: Pubkey,
         direction: PositionDirection,
         size: u64,
@@ -78,7 +78,14 @@ pub mod perps {
         update_position::handler(ctx, token_mint, direction, size, leverage)
     }
 
-    pub fn withdraw_collateral<'info>(ctx: Context<'_, '_, 'info, 'info, WithdrawCollateral<'info>>, amount: u64) -> Result<()> {
-        withdraw_collateral::handler(ctx, amount)
+    pub fn close_position(ctx: Context<ClosePosition>, token_mint: Pubkey) -> Result<()> {
+        close_position::handler(ctx, token_mint)
+    }
+
+    pub fn view_position_pnl(
+        ctx: Context<ViewPositionPnl>,
+        token_mint: Pubkey,
+    ) -> Result<PositionInfo> {
+        view_position_pnl::handler(ctx, token_mint)
     }
 }

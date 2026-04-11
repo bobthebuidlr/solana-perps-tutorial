@@ -2,9 +2,9 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{Token, TokenAccount};
 
 use crate::{
-    calculate_funding_pnl, calculate_notional, calculate_price_pnl, constants::*,
-    error::ErrorCode, remove_open_interest, settle_pnl, update_funding_indices, Markets, Oracle,
-    Position, ProtocolConfig, UserAccount,
+    calculate_funding_pnl, calculate_notional, calculate_price_pnl, constants::*, error::ErrorCode,
+    remove_open_interest, settle_pnl, update_funding_indices, Markets, Oracle, ProtocolConfig,
+    UserAccount,
 };
 
 #[derive(Accounts)]
@@ -19,14 +19,6 @@ pub struct ClosePosition<'info> {
         bump = user_account.bump
     )]
     pub user_account: Account<'info, UserAccount>,
-
-    #[account(
-        mut,
-        seeds = [POSITION_SEED, user.key().as_ref(), token_mint.to_bytes().as_ref()],
-        bump = position.bump,
-        close = user
-    )]
-    pub position: Account<'info, Position>,
 
     #[account(mut)]
     pub markets: Account<'info, Markets>,
@@ -58,12 +50,17 @@ pub struct ClosePosition<'info> {
     pub token_program: Program<'info, Token>,
 }
 
-/// Closes a position, settles PnL, and adjusts market open interest.
+/// Closes the user's position on `token_mint`, settles PnL, adjusts market OI,
+/// and removes the position from the user's inline positions list.
+///
+/// @param ctx ClosePosition accounts context
+/// @param token_mint Market token mint
+/// @return Result<()>
 pub fn handler(ctx: Context<ClosePosition>, token_mint: Pubkey) -> Result<()> {
     let clock = Clock::get()?;
     let markets = &mut ctx.accounts.markets;
 
-    // CRITICAL: Update funding indices BEFORE OI changes
+    // IMPORTANT: Update funding indices BEFORE OI changes
     update_funding_indices(&mut markets.perps, clock.unix_timestamp)?;
 
     let perps_market = markets
@@ -81,29 +78,34 @@ pub fn handler(ctx: Context<ClosePosition>, token_mint: Pubkey) -> Result<()> {
         .ok_or(error!(ErrorCode::OraclePriceNotFound))?
         .price;
 
-    let position = &ctx.accounts.position;
+    // Locate the position inline and snapshot it for PnL math.
+    let idx = ctx
+        .accounts
+        .user_account
+        .positions
+        .iter()
+        .position(|p| p.perps_market == token_mint)
+        .ok_or(error!(ErrorCode::PositionNotFound))?;
+    let position = ctx.accounts.user_account.positions[idx].clone();
 
-    let price_pnl = calculate_price_pnl(position, oracle_price)?;
-    let funding_pnl = calculate_funding_pnl(position, perps_market, None)?;
+    let price_pnl = calculate_price_pnl(&position, oracle_price)?;
+    let funding_pnl = calculate_funding_pnl(&position, perps_market, None)?;
     let total_pnl = price_pnl
         .checked_add(funding_pnl)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
 
-    let position_collateral = position.collateral;
-    let position_direction = position.direction;
     let entry_notional = calculate_notional(position.position_size, position.entry_price)?;
 
     // Settle PnL via token transfers
     let user_key = ctx.accounts.user.key();
     let collateral_bump = ctx.bumps.user_collateral_token_account;
-    let collateral_seeds: &[&[u8]] =
-        &[USER_COLLATERAL_SEED, user_key.as_ref(), &[collateral_bump]];
+    let collateral_seeds: &[&[u8]] = &[USER_COLLATERAL_SEED, user_key.as_ref(), &[collateral_bump]];
     let vault_bump = ctx.bumps.vault;
     let vault_seeds: &[&[u8]] = &[VAULT_SEED, &[vault_bump]];
 
     settle_pnl(
         total_pnl,
-        position_collateral,
+        position.collateral,
         &ctx.accounts.user_collateral_token_account,
         &ctx.accounts.vault,
         &ctx.accounts.token_program,
@@ -111,7 +113,10 @@ pub fn handler(ctx: Context<ClosePosition>, token_mint: Pubkey) -> Result<()> {
         &[vault_seeds],
     )?;
 
-    remove_open_interest(perps_market, position_direction, entry_notional)?;
+    remove_open_interest(perps_market, position.direction, entry_notional)?;
+
+    // Drop the position from the inline list.
+    ctx.accounts.user_account.positions.swap_remove(idx);
 
     Ok(())
 }

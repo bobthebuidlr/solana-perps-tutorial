@@ -6,7 +6,7 @@ import { PERPS_PROGRAM_ADDRESS } from "../generated/perps";
 import { getUpdatePositionInstructionDataEncoder } from "../generated/perps/instructions/updatePosition";
 import { PositionDirection } from "../generated/perps/types/positionDirection";
 import { TOKEN_PROGRAM_ADDRESS } from "../lib/constants";
-import { derivePositionPda, deriveUserCollateralPda, deriveVaultPda } from "../lib/pdas";
+import { deriveUserCollateralPda, deriveVaultPda } from "../lib/pdas";
 import { useConfigPda, useMarketsPda, useOraclePda, useUserAccountPda } from "./usePdas";
 
 /**
@@ -56,7 +56,6 @@ export function useUpdatePosition() {
       setError(null);
 
       try {
-        const positionAddress = await derivePositionPda(walletAddress, tokenMint);
         const userCollateralAddress = await deriveUserCollateralPda(walletAddress);
         const vaultAddress = await deriveVaultPda();
 
@@ -65,7 +64,6 @@ export function useUpdatePosition() {
           accounts: [
             { address: walletAddress, role: 3 },              // user (WritableSigner)
             { address: userAccountAddress, role: 1 },         // userAccount (Writable)
-            { address: positionAddress, role: 1 },            // position (Writable)
             { address: marketsAddress, role: 1 },             // markets (Writable)
             { address: oracleAddress, role: 0 },              // oracle (Readonly)
             { address: configAddress, role: 0 },              // config (Readonly)

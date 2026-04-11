@@ -1,7 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::error::ErrorCode;
-use crate::MAX_MARKETS;
+use crate::{MAX_MARKETS, MAX_POSITIONS};
 
 #[account]
 #[derive(InitSpace, Debug)]
@@ -15,6 +14,7 @@ pub struct ProtocolConfig {
 pub struct Markets {
     #[max_len(MAX_MARKETS)]
     pub perps: Vec<PerpsMarket>,
+    // Other markets like Spot could be added here
 }
 
 #[derive(Debug, AnchorSerialize, AnchorDeserialize, Clone, InitSpace)]
@@ -23,18 +23,12 @@ pub struct PerpsMarket {
 
     #[max_len(32)]
     pub name: String,
-
     pub total_long_oi: u64,
     pub total_short_oi: u64,
-
     pub cumulative_funding_long: i128,
     pub cumulative_funding_short: i128,
     pub last_funding_update: i64,
-
-    /// 6-decimal (e.g. 10_000_000 = 10x)
     pub max_leverage: u64,
-
-    /// 6-decimal (e.g. 50_000 = 5%)
     pub maintenance_margin_ratio: u64,
 }
 
@@ -62,31 +56,19 @@ pub enum PositionDirection {
 #[derive(InitSpace, Debug)]
 pub struct UserAccount {
     pub authority: Pubkey,
-    pub locked_collateral: u64,
     pub bump: u8,
+    #[max_len(MAX_POSITIONS)]
+    pub positions: Vec<Position>,
 }
 
-impl UserAccount {
-    /// Returns available (unlocked) collateral.
-    pub fn available_collateral(&self, token_balance: u64) -> Result<u64> {
-        token_balance
-            .checked_sub(self.locked_collateral)
-            .ok_or(error!(ErrorCode::InvalidCollateralState))
-    }
-}
-
-#[account]
-#[derive(InitSpace, Debug)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, InitSpace, Debug)]
 pub struct Position {
-    pub user_account: Pubkey,
     pub perps_market: Pubkey,
     pub direction: PositionDirection,
     pub entry_price: u64,
     pub position_size: u64,
     pub collateral: u64,
     pub entry_funding_index: i128,
-    pub opened_at: i64,
-    pub bump: u8,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Debug, InitSpace)]

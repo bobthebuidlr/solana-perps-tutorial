@@ -1,51 +1,44 @@
 import { useQuery } from "@tanstack/react-query";
 import { useSolanaClient, useWalletConnection } from "@solana/react-hooks";
-import {
-  fetchAllMaybePosition,
-  type Position,
-} from "../generated/perps/accounts/position";
-import { derivePositionPda } from "../lib/pdas";
-import { useMarkets } from "./useMarkets";
+import { fetchMaybeUserAccount } from "../generated/perps/accounts/userAccount";
+import { type Position } from "../generated/perps/types/position";
+import { useUserAccountPda } from "./usePdas";
 
 /**
- * Fetches all open Position accounts owned by the connected wallet.
- * Derives position PDAs from known markets and batch-fetches to find
- * which positions exist. Uses React Query for caching and 5-second auto-refresh.
+ * Fetches all open positions for the connected wallet by reading them
+ * inline from the user's UserAccount. Uses React Query for caching and
+ * 5-second auto-refresh.
  *
- * @returns positions - Array of decoded Position data; empty when none exist.
- * @returns isLoading - True while the RPC calls are in-flight.
+ * @returns positions - Array of Position structs; empty when none exist.
+ * @returns isLoading - True while the RPC call is in-flight.
  * @returns error - Last fetch error, or null.
  */
 export function usePositions() {
   const client = useSolanaClient();
   const { wallet } = useWalletConnection();
-  const { markets } = useMarkets();
-
   const walletAddress = wallet?.account.address;
+  const userAccountAddress = useUserAccountPda(walletAddress);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["positions", walletAddress ?? "disconnected"],
     queryFn: async (): Promise<Position[]> => {
-      if (!walletAddress || !client?.runtime?.rpc || !markets || markets.length === 0) {
+      if (!walletAddress || !client?.runtime?.rpc || !userAccountAddress) {
         return [];
       }
 
-      // Derive position PDA for each known market
-      const positionAddresses = await Promise.all(
-        markets.map((m) => derivePositionPda(walletAddress, m.tokenMint))
-      );
-
-      // Batch-fetch all derived position PDAs in a single RPC call
-      const maybePositions = await fetchAllMaybePosition(
+      const maybeAccount = await fetchMaybeUserAccount(
         client.runtime.rpc,
-        positionAddresses
+        userAccountAddress
       );
 
-      return maybePositions
-        .filter((p): p is Extract<typeof p, { exists: true }> => p.exists)
-        .map((p) => p.data);
+      if (!maybeAccount.exists) {
+        return [];
+      }
+
+      return [...maybeAccount.data.positions];
     },
-    enabled: !!walletAddress && !!client?.runtime?.rpc && !!markets && markets.length > 0,
+    enabled:
+      !!walletAddress && !!client?.runtime?.rpc && !!userAccountAddress,
     refetchInterval: 5000,
   });
 

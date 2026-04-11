@@ -53,18 +53,15 @@ pub fn handler(ctx: Context<DepositCollateral>, amount: u64) -> Result<()> {
 
     let user_account = &mut ctx.accounts.user_account;
 
+    // Initialize the values of the user account if it doesn't exist
     if user_account.authority == Pubkey::default() {
         user_account.authority = ctx.accounts.user.key();
-        user_account.locked_collateral = 0;
         user_account.bump = ctx.bumps.user_account;
     }
 
     let cpi_accounts = Transfer {
         from: ctx.accounts.user_token_account.to_account_info(),
-        to: ctx
-            .accounts
-            .user_collateral_token_account
-            .to_account_info(),
+        to: ctx.accounts.user_collateral_token_account.to_account_info(),
         authority: ctx.accounts.user.to_account_info(),
     };
 

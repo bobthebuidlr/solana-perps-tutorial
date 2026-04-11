@@ -141,13 +141,11 @@ export type DepositCollateralAsyncInput<
   TAccountTokenProgram extends string = string,
   TAccountSystemProgram extends string = string,
 > = {
-  /** User depositing collateral */
   user: TransactionSigner<TAccountUser>;
   userAccount?: Address<TAccountUserAccount>;
-  /** Protocol config — validates accepted USDC mint */
   config?: Address<TAccountConfig>;
   userTokenAccount: Address<TAccountUserTokenAccount>;
-  /** Per-user collateral token account PDA — holds the user's deposited USDC */
+  /** Per-user collateral token account PDA */
   userCollateralTokenAccount?: Address<TAccountUserCollateralTokenAccount>;
   usdcMint: Address<TAccountUsdcMint>;
   tokenProgram?: Address<TAccountTokenProgram>;
@@ -298,13 +296,11 @@ export type DepositCollateralInput<
   TAccountTokenProgram extends string = string,
   TAccountSystemProgram extends string = string,
 > = {
-  /** User depositing collateral */
   user: TransactionSigner<TAccountUser>;
   userAccount: Address<TAccountUserAccount>;
-  /** Protocol config — validates accepted USDC mint */
   config: Address<TAccountConfig>;
   userTokenAccount: Address<TAccountUserTokenAccount>;
-  /** Per-user collateral token account PDA — holds the user's deposited USDC */
+  /** Per-user collateral token account PDA */
   userCollateralTokenAccount: Address<TAccountUserCollateralTokenAccount>;
   usdcMint: Address<TAccountUsdcMint>;
   tokenProgram?: Address<TAccountTokenProgram>;
@@ -418,13 +414,11 @@ export type ParsedDepositCollateralInstruction<
 > = {
   programAddress: Address<TProgram>;
   accounts: {
-    /** User depositing collateral */
     user: TAccountMetas[0];
     userAccount: TAccountMetas[1];
-    /** Protocol config — validates accepted USDC mint */
     config: TAccountMetas[2];
     userTokenAccount: TAccountMetas[3];
-    /** Per-user collateral token account PDA — holds the user's deposited USDC */
+    /** Per-user collateral token account PDA */
     userCollateralTokenAccount: TAccountMetas[4];
     usdcMint: TAccountMetas[5];
     tokenProgram: TAccountMetas[6];

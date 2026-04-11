@@ -17,27 +17,33 @@ import {
   fixEncoderSize,
   getAddressDecoder,
   getAddressEncoder,
+  getArrayDecoder,
+  getArrayEncoder,
   getBytesDecoder,
   getBytesEncoder,
   getStructDecoder,
   getStructEncoder,
-  getU64Decoder,
-  getU64Encoder,
   getU8Decoder,
   getU8Encoder,
   transformEncoder,
   type Account,
   type Address,
+  type Codec,
+  type Decoder,
   type EncodedAccount,
+  type Encoder,
   type FetchAccountConfig,
   type FetchAccountsConfig,
-  type FixedSizeCodec,
-  type FixedSizeDecoder,
-  type FixedSizeEncoder,
   type MaybeAccount,
   type MaybeEncodedAccount,
   type ReadonlyUint8Array,
 } from "@solana/kit";
+import {
+  getPositionDecoder,
+  getPositionEncoder,
+  type Position,
+  type PositionArgs,
+} from "../types";
 
 export const USER_ACCOUNT_DISCRIMINATOR = new Uint8Array([
   211, 33, 136, 16, 186, 110, 242, 127,
@@ -51,49 +57,42 @@ export function getUserAccountDiscriminatorBytes() {
 
 export type UserAccount = {
   discriminator: ReadonlyUint8Array;
-  /** User that owns this account */
   authority: Address;
-  /** Collateral locked in open positions */
-  lockedCollateral: bigint;
   bump: number;
+  positions: Array<Position>;
 };
 
 export type UserAccountArgs = {
-  /** User that owns this account */
   authority: Address;
-  /** Collateral locked in open positions */
-  lockedCollateral: number | bigint;
   bump: number;
+  positions: Array<PositionArgs>;
 };
 
 /** Gets the encoder for {@link UserAccountArgs} account data. */
-export function getUserAccountEncoder(): FixedSizeEncoder<UserAccountArgs> {
+export function getUserAccountEncoder(): Encoder<UserAccountArgs> {
   return transformEncoder(
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
       ["authority", getAddressEncoder()],
-      ["lockedCollateral", getU64Encoder()],
       ["bump", getU8Encoder()],
+      ["positions", getArrayEncoder(getPositionEncoder())],
     ]),
     (value) => ({ ...value, discriminator: USER_ACCOUNT_DISCRIMINATOR }),
   );
 }
 
 /** Gets the decoder for {@link UserAccount} account data. */
-export function getUserAccountDecoder(): FixedSizeDecoder<UserAccount> {
+export function getUserAccountDecoder(): Decoder<UserAccount> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
     ["authority", getAddressDecoder()],
-    ["lockedCollateral", getU64Decoder()],
     ["bump", getU8Decoder()],
+    ["positions", getArrayDecoder(getPositionDecoder())],
   ]);
 }
 
 /** Gets the codec for {@link UserAccount} account data. */
-export function getUserAccountCodec(): FixedSizeCodec<
-  UserAccountArgs,
-  UserAccount
-> {
+export function getUserAccountCodec(): Codec<UserAccountArgs, UserAccount> {
   return combineCodec(getUserAccountEncoder(), getUserAccountDecoder());
 }
 
@@ -148,8 +147,4 @@ export async function fetchAllMaybeUserAccount(
 ): Promise<MaybeAccount<UserAccount>[]> {
   const maybeAccounts = await fetchEncodedAccounts(rpc, addresses, config);
   return maybeAccounts.map((maybeAccount) => decodeUserAccount(maybeAccount));
-}
-
-export function getUserAccountSize(): number {
-  return 49;
 }
