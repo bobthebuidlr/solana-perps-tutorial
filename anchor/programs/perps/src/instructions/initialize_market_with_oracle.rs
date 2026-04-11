@@ -14,14 +14,7 @@ pub struct InitializeMarketWithOracle<'info> {
     pub oracle: Account<'info, Oracle>,
 }
 
-/// Initializes a new perpetual market with an oracle price entry.
-/// @param ctx - Accounts context.
-/// @param token - Token mint pubkey for the market.
-/// @param name - Human-readable market name.
-/// @param price - Initial oracle price (6-decimal fixed point).
-/// @param max_leverage - Maximum allowed leverage (6-decimal, e.g. 10_000_000 = 10x).
-/// @param maintenance_margin_ratio - Maintenance margin ratio (6-decimal, e.g. 50_000 = 5%).
-/// @returns Ok(()) on success.
+/// Creates a new perpetual market with an initial oracle price.
 pub fn handler(
     ctx: Context<InitializeMarketWithOracle>,
     token: Pubkey,
@@ -31,12 +24,10 @@ pub fn handler(
     maintenance_margin_ratio: u64,
 ) -> Result<()> {
     let clock = Clock::get()?;
-    let markets = &mut ctx.accounts.markets;
-    let oracle = &mut ctx.accounts.oracle;
 
-    let perps_market = PerpsMarket {
+    ctx.accounts.markets.perps.push(PerpsMarket {
         token_mint: token,
-        name: name,
+        name,
         total_long_oi: 0,
         total_short_oi: 0,
         cumulative_funding_long: 0,
@@ -44,16 +35,13 @@ pub fn handler(
         last_funding_update: clock.unix_timestamp,
         max_leverage,
         maintenance_margin_ratio,
-    };
+    });
 
-    let oracle_price = OraclePrice {
+    ctx.accounts.oracle.prices.push(OraclePrice {
         token_mint: token,
-        price: price,
+        price,
         last_updated: clock.unix_timestamp,
-    };
-
-    markets.perps.push(perps_market);
-    oracle.prices.push(oracle_price);
+    });
 
     Ok(())
 }

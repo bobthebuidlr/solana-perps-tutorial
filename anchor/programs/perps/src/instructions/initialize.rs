@@ -26,7 +26,6 @@ pub struct Initialize<'info> {
     )]
     pub oracle: Account<'info, Oracle>,
 
-    /// Protocol config — stores the accepted USDC mint
     #[account(
       init,
       payer = authority,
@@ -52,13 +51,9 @@ pub struct Initialize<'info> {
 }
 
 /// Initializes the protocol: Markets, Oracle, ProtocolConfig, and Vault.
-/// @param ctx - Accounts context.
-/// @returns Ok(()) on success.
 pub fn handler(ctx: Context<Initialize>) -> Result<()> {
-    let markets = &mut ctx.accounts.markets;
-    let oracle = &mut ctx.accounts.oracle;
-    markets.perps = Vec::new();
-    oracle.prices = Vec::new();
+    ctx.accounts.markets.perps = Vec::new();
+    ctx.accounts.oracle.prices = Vec::new();
 
     let config = &mut ctx.accounts.config;
     config.usdc_mint = ctx.accounts.usdc_mint.key();

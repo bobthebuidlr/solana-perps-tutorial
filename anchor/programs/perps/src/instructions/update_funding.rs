@@ -8,16 +8,10 @@ pub struct UpdateFunding<'info> {
     pub markets: Account<'info, Markets>,
 }
 
-/// Update the funding indices to the current timestamp
-/// This should be called periodically to ensure funding indices stay up-to-date
+/// Updates funding indices for all markets to the current timestamp.
 pub fn handler(ctx: Context<UpdateFunding>) -> Result<()> {
     let markets = &mut ctx.accounts.markets;
     let clock = Clock::get()?;
-
-    // Update funding indices to current time
     update_funding_indices(&mut markets.perps, clock.unix_timestamp)?;
-
-    msg!("Funding indices updated to current time");
-
     Ok(())
 }

@@ -8,11 +8,9 @@ use crate::{
 
 #[derive(Accounts)]
 pub struct WithdrawCollateral<'info> {
-    /// User withdrawing collateral
     #[account(mut)]
     pub user: Signer<'info>,
 
-    /// User collateral account
     #[account(
         mut,
         seeds = [USER_SEED, user.key().as_ref()],
@@ -20,14 +18,12 @@ pub struct WithdrawCollateral<'info> {
     )]
     pub user_account: Account<'info, UserAccount>,
 
-    /// Protocol config — validates accepted USDC mint
     #[account(
         seeds = [CONFIG_SEED],
         bump = config.bump
     )]
     pub config: Account<'info, ProtocolConfig>,
 
-    /// Per-user collateral token account PDA — signs outbound transfers
     #[account(
         mut,
         seeds = [USER_COLLATERAL_SEED, user.key().as_ref()],
@@ -36,7 +32,6 @@ pub struct WithdrawCollateral<'info> {
     )]
     pub user_collateral_token_account: Account<'info, TokenAccount>,
 
-    /// User's USDC token account to receive the withdrawn collateral
     #[account(
         mut,
         constraint = user_token_account.owner == user.key() @ ErrorCode::UnauthorizedAccess,
@@ -44,32 +39,22 @@ pub struct WithdrawCollateral<'info> {
     )]
     pub user_token_account: Account<'info, TokenAccount>,
 
-    /// Markets account — needed for maintenance margin ratios
     pub markets: Account<'info, Markets>,
-
-    /// Oracle account — needed for current prices
     pub oracle: Account<'info, Oracle>,
-
     pub token_program: Program<'info, Token>,
 }
 
-/// Withdraws collateral from the user's collateral token account to the user's wallet.
-/// Checks that withdrawal does not put the account below maintenance margin.
-/// Pass all open position accounts as remaining_accounts for cross-margin health check.
-/// @param ctx - Accounts context.
-/// @param amount - Amount of USDC (6-decimal) to withdraw.
-/// @returns Ok(()) on success.
+/// Withdraws collateral to the user's wallet.
+/// Pass all open positions as remaining_accounts for cross-margin health check.
 pub fn handler<'info>(ctx: Context<'_, '_, 'info, 'info, WithdrawCollateral<'info>>, amount: u64) -> Result<()> {
     require!(amount > 0, ErrorCode::InvalidAmount);
 
-    let user_account = &ctx.accounts.user_account;
     let token_balance = ctx.accounts.user_collateral_token_account.amount;
-
     require!(token_balance >= amount, ErrorCode::InsufficientCollateral);
 
-    // Cross-margin health check: if positions exist in remaining_accounts,
-    // verify withdrawal doesn't breach maintenance margin
+    // Cross-margin health check
     if !ctx.remaining_accounts.is_empty() {
+        let user_account = &ctx.accounts.user_account;
         let mut positions: Vec<Position> = Vec::new();
         for account_info in ctx.remaining_accounts.iter() {
             if let Ok(position) = Account::<Position>::try_from(account_info) {
@@ -98,7 +83,6 @@ pub fn handler<'info>(ctx: Context<'_, '_, 'info, 'info, WithdrawCollateral<'inf
         }
     }
 
-    // CPI: user collateral PDA signs the transfer to user_token_account
     let collateral_bump = ctx.bumps.user_collateral_token_account;
     let user_key = ctx.accounts.user.key();
     let collateral_seeds: &[&[u8]] =
@@ -122,8 +106,6 @@ pub fn handler<'info>(ctx: Context<'_, '_, 'info, 'info, WithdrawCollateral<'inf
         signer_seeds,
     );
     token::transfer(cpi_ctx, amount)?;
-
-    msg!("Withdrew {} USDC (6-decimal) to user", amount);
 
     Ok(())
 }

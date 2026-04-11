@@ -5,7 +5,6 @@ use crate::{constants::*, error::ErrorCode, state::UserAccount, ProtocolConfig};
 
 #[derive(Accounts)]
 pub struct DepositCollateral<'info> {
-    /// User depositing collateral
     #[account(mut)]
     pub user: Signer<'info>,
 
@@ -18,7 +17,6 @@ pub struct DepositCollateral<'info> {
     )]
     pub user_account: Account<'info, UserAccount>,
 
-    /// Protocol config — validates accepted USDC mint
     #[account(
       seeds = [CONFIG_SEED],
       bump = config.bump
@@ -32,7 +30,7 @@ pub struct DepositCollateral<'info> {
     )]
     pub user_token_account: Account<'info, TokenAccount>,
 
-    /// Per-user collateral token account PDA — holds the user's deposited USDC
+    /// Per-user collateral token account PDA
     #[account(
       init_if_needed,
       payer = user,
@@ -49,10 +47,7 @@ pub struct DepositCollateral<'info> {
     pub system_program: Program<'info, System>,
 }
 
-/// Deposits USDC from the user's wallet into their per-user collateral token account.
-/// @param ctx - Accounts context.
-/// @param amount - Amount of USDC (6-decimal) to deposit.
-/// @returns Ok(()) on success.
+/// Deposits USDC from the user's wallet into their collateral account.
 pub fn handler(ctx: Context<DepositCollateral>, amount: u64) -> Result<()> {
     require!(amount > 0, ErrorCode::InvalidAmount);
 
@@ -64,7 +59,6 @@ pub fn handler(ctx: Context<DepositCollateral>, amount: u64) -> Result<()> {
         user_account.bump = ctx.bumps.user_account;
     }
 
-    // Transfer tokens from user wallet to user's collateral token account
     let cpi_accounts = Transfer {
         from: ctx.accounts.user_token_account.to_account_info(),
         to: ctx
@@ -74,12 +68,8 @@ pub fn handler(ctx: Context<DepositCollateral>, amount: u64) -> Result<()> {
         authority: ctx.accounts.user.to_account_info(),
     };
 
-    let cpi_ctx: CpiContext<'_, '_, '_, '_, Transfer<'_>> =
-        CpiContext::new(ctx.accounts.token_program.key(), cpi_accounts);
-
+    let cpi_ctx = CpiContext::new(ctx.accounts.token_program.key(), cpi_accounts);
     token::transfer(cpi_ctx, amount)?;
-
-    msg!("User deposited {} tokens", amount);
 
     Ok(())
 }

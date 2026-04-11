@@ -12,7 +12,7 @@ pub struct ViewPositionPnl<'info> {
     pub oracle: Account<'info, Oracle>,
 }
 
-// TODO: Find out if I should name it always token or token_mint
+/// Returns position info with current price and funding PnL.
 pub fn handler(ctx: Context<ViewPositionPnl>, token_mint: Pubkey) -> Result<PositionInfo> {
     let position = &ctx.accounts.position;
     let oracle = &ctx.accounts.oracle;
@@ -32,16 +32,11 @@ pub fn handler(ctx: Context<ViewPositionPnl>, token_mint: Pubkey) -> Result<Posi
         .find(|m| m.token_mint == token_mint)
         .ok_or(error!(ErrorCode::MarketNotFound))?;
 
-    // Calculate price-based PnL
     let pnl = calculate_price_pnl(position, oracle_price.price)?;
-
-    // Calculate accumulated funding PnL (calculates current indices without mutating)
     let funding_pnl = calculate_funding_pnl(position, perps_market, Some(clock.unix_timestamp))?;
-
-    // Calculate total PnL (price PnL + funding PnL)
     let total_pnl = pnl
         .checked_add(funding_pnl)
-        .ok_or(error!(crate::error::ErrorCode::ArithmeticOverflow))?;
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
 
     Ok(PositionInfo {
         size: position.position_size,

@@ -6,12 +6,6 @@ use crate::{
     PerpsMarket, Position, PositionDirection,
 };
 
-/// Creates a test PerpsMarket with the given OI and funding indices.
-/// @param total_long_oi - Total long open interest.
-/// @param total_short_oi - Total short open interest.
-/// @param cumulative_funding_long - Cumulative funding index for longs.
-/// @param cumulative_funding_short - Cumulative funding index for shorts.
-/// @returns A PerpsMarket with default values for non-funding fields.
 fn make_market(
     total_long_oi: u64,
     total_short_oi: u64,
@@ -31,13 +25,6 @@ fn make_market(
     }
 }
 
-/// Creates a test Position.
-/// @param direction - Long or Short.
-/// @param position_size - Token quantity (6-decimal).
-/// @param entry_price - Entry price (6-decimal fixed point).
-/// @param collateral - USDC collateral locked.
-/// @param entry_funding_index - Funding index at position open.
-/// @returns A Position with default values for non-relevant fields.
 fn make_position(
     direction: PositionDirection,
     position_size: u64,

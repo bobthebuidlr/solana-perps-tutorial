@@ -4,13 +4,7 @@ use anchor_lang::prelude::*;
 pub const MARKETS_SEED: &[u8] = b"markets";
 
 #[constant]
-pub const SEED: &[u8] = b"anchor";
-
-#[constant]
 pub const ORACLE_SEED: &[u8] = b"oracle";
-
-#[constant]
-pub const MARKET_SEED: &[u8] = b"market";
 
 #[constant]
 pub const USER_SEED: &[u8] = b"user";

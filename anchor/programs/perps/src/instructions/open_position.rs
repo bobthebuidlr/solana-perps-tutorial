@@ -2,18 +2,17 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::TokenAccount;
 
 use crate::{
-    calculate_account_health, constants::*, error::ErrorCode, update_funding_indices, Markets,
-    Oracle, Position, PositionDirection, UserAccount, LEVERAGE_PRECISION,
+    add_open_interest, calculate_account_health, calculate_notional, constants::*,
+    error::ErrorCode, update_funding_indices, Markets, Oracle, Position, PositionDirection,
+    UserAccount, LEVERAGE_PRECISION,
 };
 
 #[derive(Accounts)]
 #[instruction(token_mint: Pubkey)]
 pub struct OpenPosition<'info> {
-    /// User opening the position
     #[account(mut)]
     pub user: Signer<'info>,
 
-    /// User collateral account
     #[account(mut,
       seeds = [USER_SEED, user.key().as_ref()],
       bump = user_account.bump
@@ -34,7 +33,6 @@ pub struct OpenPosition<'info> {
 
     pub oracle: Account<'info, Oracle>,
 
-    /// Per-user collateral token account PDA — read to check available balance
     #[account(
         seeds = [USER_COLLATERAL_SEED, user.key().as_ref()],
         bump
@@ -44,14 +42,8 @@ pub struct OpenPosition<'info> {
     pub system_program: Program<'info, System>,
 }
 
-/// Opens a new leveraged position in a perps market.
+/// Opens a new leveraged position.
 /// Pass existing open positions as remaining_accounts for cross-margin health check.
-/// @param ctx - Accounts context.
-/// @param token_mint - The token mint of the market.
-/// @param direction - Long or Short.
-/// @param size - Token quantity in 6-decimal fixed point (e.g. 1 SOL = 1_000_000).
-/// @param leverage - Leverage multiplier in 6-decimal (e.g. 5_000_000 = 5x, 1_000_000 = 1x).
-/// @returns Ok(()) on success.
 pub fn handler<'info>(
     ctx: Context<'_, '_, 'info, 'info, OpenPosition<'info>>,
     token_mint: Pubkey,
@@ -62,7 +54,6 @@ pub fn handler<'info>(
     let token_balance = ctx.accounts.user_collateral_token_account.amount;
     let user_account_key = ctx.accounts.user_account.key();
 
-    // Read spot price and max leverage before mutable borrow
     let spot_price = ctx
         .accounts
         .oracle
@@ -81,26 +72,19 @@ pub fn handler<'info>(
         .ok_or(error!(ErrorCode::MarketNotFound))?
         .max_leverage;
 
-    // Validate leverage bounds
     require!(leverage >= LEVERAGE_PRECISION, ErrorCode::ExceedsMaxLeverage);
     require!(leverage <= market_max_leverage, ErrorCode::ExceedsMaxLeverage);
 
-    // Compute notional value: size * spot_price / 10^6
-    let notional = (size as u128)
-        .checked_mul(spot_price as u128)
-        .ok_or(ErrorCode::ArithmeticOverflow)?
-        .checked_div(1_000_000u128)
-        .ok_or(ErrorCode::ArithmeticOverflow)?;
+    let notional = calculate_notional(size, spot_price)?;
 
-    // Compute required collateral (margin): notional * LEVERAGE_PRECISION / leverage
-    let collateral_usdc = notional
+    // Required collateral (margin): notional / leverage
+    let collateral_usdc = (notional as u128)
         .checked_mul(LEVERAGE_PRECISION as u128)
         .ok_or(ErrorCode::ArithmeticOverflow)?
         .checked_div(leverage as u128)
         .ok_or(ErrorCode::ArithmeticOverflow)? as u64;
 
-    // Cross-margin check: ensure account can afford this new position
-    // Collect existing positions from remaining_accounts
+    // Cross-margin check: collect existing positions from remaining_accounts
     let mut existing_positions: Vec<Position> = Vec::new();
     for account_info in ctx.remaining_accounts.iter() {
         if let Ok(pos) = Account::<Position>::try_from(account_info) {
@@ -110,7 +94,6 @@ pub fn handler<'info>(
         }
     }
 
-    // Calculate current account health (immutable borrow of markets/oracle)
     let (current_equity, current_maintenance) = calculate_account_health(
         &existing_positions,
         &ctx.accounts.markets,
@@ -124,7 +107,6 @@ pub fn handler<'info>(
         ErrorCode::InsufficientCollateral
     );
 
-    // Now take mutable borrows for state updates
     let clock = Clock::get()?;
     let markets = &mut ctx.accounts.markets;
 
@@ -137,7 +119,6 @@ pub fn handler<'info>(
         .find(|m| m.token_mint == token_mint)
         .ok_or(error!(ErrorCode::MarketNotFound))?;
 
-    // Initialize position
     let user_account = &mut ctx.accounts.user_account;
     let position = &mut ctx.accounts.position;
     position.user_account = user_account.key();
@@ -153,33 +134,7 @@ pub fn handler<'info>(
     position.opened_at = clock.unix_timestamp;
     position.bump = ctx.bumps.position;
 
-    // Update market open interest in notional (USDC) terms
-    let notional_u64 = notional as u64;
-    match direction {
-        PositionDirection::Long => {
-            perps_market.total_long_oi = perps_market
-                .total_long_oi
-                .checked_add(notional_u64)
-                .ok_or(ErrorCode::ArithmeticOverflow)?;
-        }
-        PositionDirection::Short => {
-            perps_market.total_short_oi = perps_market
-                .total_short_oi
-                .checked_add(notional_u64)
-                .ok_or(ErrorCode::ArithmeticOverflow)?;
-        }
-    }
-
-    msg!("Position opened successfully");
-    msg!("Direction: {:?}", direction);
-    msg!("Token quantity: {} (6-decimal)", size);
-    msg!("Leverage: {}x", leverage / LEVERAGE_PRECISION);
-    msg!("Notional: {} USDC (6-decimal)", notional_u64);
-    msg!("Margin: {} USDC (6-decimal)", collateral_usdc);
-    msg!("Entry price: {}", spot_price);
-    msg!("Entry funding index: {}", position.entry_funding_index);
-    msg!("Total Long OI: {}", perps_market.total_long_oi);
-    msg!("Total Short OI: {}", perps_market.total_short_oi);
+    add_open_interest(perps_market, direction, notional)?;
 
     Ok(())
 }
