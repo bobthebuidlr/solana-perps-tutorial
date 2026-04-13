@@ -1,0 +1,88 @@
+pub mod constants;
+pub mod error;
+pub mod instructions;
+pub mod state;
+pub mod utils;
+
+#[cfg(test)]
+mod tests;
+
+use anchor_lang::prelude::*;
+
+pub use constants::*;
+pub use instructions::*;
+pub use state::*;
+pub use utils::*;
+
+declare_id!("6q2SoxHGceNGtQbf3fwYWZwPQkP14yDbLjhythtPkB7P");
+
+#[program]
+pub mod perps {
+    use super::*;
+
+    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+        instructions::initialize::handler(ctx)
+    }
+
+    pub fn initialize_market_with_oracle(
+        ctx: Context<InitializeMarketWithOracle>,
+        token: Pubkey,
+        name: String,
+        price: u64,
+        max_leverage: u64,
+        maintenance_margin_ratio: u64,
+    ) -> Result<()> {
+        instructions::initialize_market_with_oracle::handler(
+            ctx,
+            token,
+            name,
+            price,
+            max_leverage,
+            maintenance_margin_ratio,
+        )
+    }
+
+    /// Normally it would refer to a third party oracle, but for this demo
+    /// There is no security / checks on updating the oracle price.
+    pub fn update_oracle(ctx: Context<UpdateOracle>, token: Pubkey, new_price: u64) -> Result<()> {
+        instructions::update_oracle::handler(ctx, token, new_price)
+    }
+
+    pub fn update_funding(ctx: Context<UpdateFunding>) -> Result<()> {
+        instructions::update_funding::handler(ctx)
+    }
+
+    pub fn deposit_collateral(ctx: Context<DepositCollateral>, amount: u64) -> Result<()> {
+        instructions::deposit_collateral::handler(ctx, amount)
+    }
+
+    pub fn withdraw_collateral(ctx: Context<WithdrawCollateral>, amount: u64) -> Result<()> {
+        instructions::withdraw_collateral::handler(ctx, amount)
+    }
+
+    pub fn open_position(
+        ctx: Context<OpenPosition>,
+        token_mint: Pubkey,
+        direction: PositionDirection,
+        amount: u64,
+    ) -> Result<()> {
+        instructions::open_position::handler(ctx, token_mint, direction, amount)
+    }
+
+    pub fn update_position(
+        ctx: Context<UpdatePosition>,
+        token_mint: Pubkey,
+        direction: PositionDirection,
+        size: u64,
+    ) -> Result<()> {
+        instructions::update_position::handler(ctx, token_mint, direction, size)
+    }
+
+    pub fn close_position(ctx: Context<ClosePosition>, token_mint: Pubkey) -> Result<()> {
+        instructions::close_position::handler(ctx, token_mint)
+    }
+
+    pub fn liquidate(ctx: Context<Liquidate>, liquidatee: Pubkey) -> Result<()> {
+        instructions::liquidate::handler(ctx, liquidatee)
+    }
+}

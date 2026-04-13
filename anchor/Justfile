@@ -1,0 +1,25 @@
+# Perps protocol task runner
+
+# Format all Rust code
+fmt *args='':
+    cargo fmt {{args}}
+
+# Lint with clippy (warnings as errors)
+lint:
+    cargo clippy -- -D warnings
+
+# Run unit tests
+test:
+    cargo test
+
+# Build the Anchor program
+build:
+    anchor build
+
+# Run the full Anchor integration test suite
+test-integration:
+    anchor test
+
+# Format check (CI mode)
+fmt-check:
+    cargo fmt --check
